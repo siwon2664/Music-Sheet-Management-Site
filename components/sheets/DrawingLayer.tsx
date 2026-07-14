@@ -1,0 +1,346 @@
+'use client';
+
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { Eraser, Pencil, Trash2, Undo2 } from 'lucide-react';
+import { createClient } from '@/lib/supabase/client';
+import type { Json } from '@/types/supabase';
+
+interface Stroke {
+  color: string;
+  width: number;
+  points: [number, number][]; // 0~1로 정규화된 좌표
+  isEraser?: boolean;
+}
+
+type Tool = 'pen' | 'eraser';
+
+const ERASER_WIDTH_MULTIPLIER = 4;
+
+interface DrawingLayerProps {
+  sheetId: string;
+  teamId: string;
+}
+
+const COLORS = ['#ef4444', '#f59e0b', '#22c55e', '#3b82f6', '#a855f7', '#111827'];
+const WIDTHS = [2, 4, 8];
+
+export default function DrawingLayer({ sheetId, teamId }: DrawingLayerProps) {
+  const supabase = createClient();
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const rowIdRef = useRef<string | null>(null);
+  const strokesRef = useRef<Stroke[]>([]);
+  const activeStrokeRef = useRef<Stroke | null>(null);
+
+  const [active, setActive] = useState(false);
+  const [tool, setTool] = useState<Tool>('pen');
+  const [color, setColor] = useState(COLORS[0]);
+  const [penWidth, setPenWidth] = useState(WIDTHS[1]);
+  const [strokeCount, setStrokeCount] = useState(0);
+  const [saving, setSaving] = useState(false);
+
+  function redraw() {
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    if (!canvas || !ctx) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    const w = canvas.width / dpr;
+    const h = canvas.height / dpr;
+
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+
+    const all = activeStrokeRef.current
+      ? [...strokesRef.current, activeStrokeRef.current]
+      : strokesRef.current;
+
+    for (const stroke of all) {
+      if (stroke.points.length < 2) continue;
+      ctx.globalCompositeOperation = stroke.isEraser ? 'destination-out' : 'source-over';
+      ctx.strokeStyle = stroke.color;
+      ctx.lineWidth = stroke.width;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+      ctx.moveTo(stroke.points[0][0] * w, stroke.points[0][1] * h);
+      for (const [x, y] of stroke.points.slice(1)) ctx.lineTo(x * w, y * h);
+      ctx.stroke();
+    }
+    ctx.globalCompositeOperation = 'source-over';
+  }
+
+  function resizeCanvas() {
+    const canvas = canvasRef.current;
+    const container = containerRef.current;
+    if (!canvas || !container) return;
+    const rect = container.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.max(1, rect.width * dpr);
+    canvas.height = Math.max(1, rect.height * dpr);
+    canvas.style.width = `${rect.width}px`;
+    canvas.style.height = `${rect.height}px`;
+    redraw();
+  }
+
+  // 이 악보에 대한 내 기존 드로잉 불러오기
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user || cancelled) return;
+
+      const { data } = await supabase
+        .from('drawings')
+        .select('id, coordinates')
+        .eq('sheet_id', sheetId)
+        .eq('user_id', user.id)
+        .eq('page_number', 1)
+        .maybeSingle();
+
+      if (cancelled) return;
+
+      rowIdRef.current = data?.id ?? null;
+      const parsed = data?.coordinates as unknown as { strokes?: Stroke[] } | null;
+      strokesRef.current = parsed?.strokes ?? [];
+      setStrokeCount(strokesRef.current.length);
+      redraw();
+    }
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sheetId]);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const observer = new ResizeObserver(resizeCanvas);
+    observer.observe(container);
+    resizeCanvas();
+    return () => observer.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function getNormalizedPoint(e: ReactPointerEvent<HTMLCanvasElement>): [number, number] | null {
+    const rect = e.currentTarget.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return null;
+    return [(e.clientX - rect.left) / rect.width, (e.clientY - rect.top) / rect.height];
+  }
+
+  function handlePointerDown(e: ReactPointerEvent<HTMLCanvasElement>) {
+    if (!active) return;
+    const point = getNormalizedPoint(e);
+    if (!point) return;
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      // 일부 환경에서 포인터 캡처가 불가능해도 그리기 자체는 계속 진행한다.
+    }
+    activeStrokeRef.current = {
+      color,
+      width: tool === 'eraser' ? penWidth * ERASER_WIDTH_MULTIPLIER : penWidth,
+      points: [point],
+      isEraser: tool === 'eraser',
+    };
+    redraw();
+  }
+
+  function handlePointerMove(e: ReactPointerEvent<HTMLCanvasElement>) {
+    if (!active || !activeStrokeRef.current) return;
+    const point = getNormalizedPoint(e);
+    if (!point) return;
+    activeStrokeRef.current.points.push(point);
+    redraw();
+  }
+
+  function handlePointerUp() {
+    const stroke = activeStrokeRef.current;
+    activeStrokeRef.current = null;
+    if (stroke && stroke.points.length > 1) {
+      strokesRef.current = [...strokesRef.current, stroke];
+      setStrokeCount(strokesRef.current.length);
+      void persist(strokesRef.current);
+    }
+    redraw();
+  }
+
+  async function persist(nextStrokes: Stroke[]) {
+    setSaving(true);
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      setSaving(false);
+      return;
+    }
+
+    const payload = { strokes: nextStrokes } as unknown as Json;
+
+    if (rowIdRef.current) {
+      await supabase.from('drawings').update({ coordinates: payload }).eq('id', rowIdRef.current);
+    } else {
+      const { data } = await supabase
+        .from('drawings')
+        .insert({
+          sheet_id: sheetId,
+          team_id: teamId,
+          user_id: user.id,
+          page_number: 1,
+          coordinates: payload,
+        })
+        .select('id')
+        .single();
+      if (data) rowIdRef.current = data.id;
+    }
+
+    setSaving(false);
+  }
+
+  function handleUndo() {
+    strokesRef.current = strokesRef.current.slice(0, -1);
+    setStrokeCount(strokesRef.current.length);
+    redraw();
+    void persist(strokesRef.current);
+  }
+
+  function handleClear() {
+    if (!confirm('내 마킹을 모두 지울까요?')) return;
+    strokesRef.current = [];
+    setStrokeCount(0);
+    redraw();
+    void persist([]);
+  }
+
+  return (
+    <div ref={containerRef} className="absolute inset-0">
+      <canvas
+        ref={canvasRef}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
+        style={{ touchAction: 'none' }}
+        className={`absolute inset-0 ${active ? 'cursor-crosshair' : 'pointer-events-none'}`}
+      />
+
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-black/80 rounded-full px-3 py-2 flex-wrap justify-center max-w-[95%]"
+      >
+        <button
+          type="button"
+          onClick={() => setActive((prev) => !prev)}
+          className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
+            active ? 'bg-white text-black' : 'text-white hover:bg-white/20'
+          }`}
+          aria-label="드로잉 모드"
+        >
+          <Pencil size={16} />
+        </button>
+
+        {active && (
+          <>
+            <div className="w-px h-5 bg-white/20 shrink-0" />
+
+            <button
+              type="button"
+              onClick={() => setTool('pen')}
+              className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
+                tool === 'pen' ? 'bg-white text-black' : 'text-white hover:bg-white/20'
+              }`}
+              aria-label="펜"
+            >
+              <Pencil size={16} />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setTool('eraser')}
+              className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
+                tool === 'eraser' ? 'bg-white text-black' : 'text-white hover:bg-white/20'
+              }`}
+              aria-label="지우개"
+            >
+              <Eraser size={16} />
+            </button>
+
+            <div className="w-px h-5 bg-white/20 shrink-0" />
+
+            {tool === 'pen' && (
+              <>
+                {COLORS.map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => setColor(c)}
+                    className={`w-6 h-6 rounded-full shrink-0 border-2 ${
+                      color === c ? 'border-white' : 'border-transparent'
+                    }`}
+                    style={{ backgroundColor: c }}
+                    aria-label={`색상 ${c}`}
+                  />
+                ))}
+
+                <input
+                  type="color"
+                  value={color}
+                  onChange={(e) => setColor(e.target.value)}
+                  className="w-6 h-6 rounded-full overflow-hidden border-0 bg-transparent shrink-0 p-0"
+                  aria-label="사용자 지정 색상"
+                />
+
+                <div className="w-px h-5 bg-white/20 shrink-0" />
+              </>
+            )}
+
+            {WIDTHS.map((w) => (
+              <button
+                key={w}
+                type="button"
+                onClick={() => setPenWidth(w)}
+                className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
+                  penWidth === w ? 'bg-white/20' : ''
+                }`}
+                aria-label={`굵기 ${w}`}
+              >
+                <span className="rounded-full bg-white block" style={{ width: w + 2, height: w + 2 }} />
+              </button>
+            ))}
+
+            <div className="w-px h-5 bg-white/20 shrink-0" />
+
+            <button
+              type="button"
+              onClick={handleUndo}
+              disabled={strokeCount === 0}
+              className="w-8 h-8 rounded-full flex items-center justify-center text-white hover:bg-white/20 disabled:opacity-30 shrink-0"
+              aria-label="실행 취소"
+            >
+              <Undo2 size={16} />
+            </button>
+
+            <button
+              type="button"
+              onClick={handleClear}
+              disabled={strokeCount === 0}
+              className="w-8 h-8 rounded-full flex items-center justify-center text-white hover:bg-white/20 disabled:opacity-30 shrink-0"
+              aria-label="모두 지우기"
+            >
+              <Trash2 size={16} />
+            </button>
+
+            {saving && <span className="text-[10px] text-white/50 shrink-0">저장 중...</span>}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
