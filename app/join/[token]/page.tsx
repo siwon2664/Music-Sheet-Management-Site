@@ -25,7 +25,10 @@ export default async function JoinTeamPage({ params }: { params: { token: string
         <p className="text-sm text-gray-500">
           링크가 만료되었거나 잘못된 주소일 수 있습니다. 팀장에게 새 초대 링크를 요청해주세요.
         </p>
-        <Link href="/dashboard" className="text-sm underline">
+        <Link
+          href="/dashboard"
+          className="inline-flex items-center gap-1 text-sm text-gray-600 border rounded-lg px-3 py-2 w-fit hover:bg-gray-50 active:bg-gray-100"
+        >
           대시보드로
         </Link>
       </main>

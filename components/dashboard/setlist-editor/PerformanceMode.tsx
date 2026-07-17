@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { isPdfFile } from '@/lib/storage';
+import PdfPageViewer from '@/components/sheets/PdfPageViewer';
 import type { SetlistItem } from './SetlistPanel';
 
 interface PerformanceModeProps {
@@ -23,12 +24,37 @@ export default function PerformanceMode({ items, initialIndex = 0, onClose }: Pe
   const item = items[index];
   const effectiveKey = item ? item.transposedKey ?? item.originalKey : null;
 
+  const dragStartRef = useRef<{ x: number; y: number } | null>(null);
+
   function goPrev() {
     setIndex((prev) => Math.max(0, prev - 1));
   }
 
   function goNext() {
     setIndex((prev) => Math.min(items.length - 1, prev + 1));
+  }
+
+  // 곡 넘기기: 좌우로 드래그(스와이프)해서 이전/다음 곡으로 이동.
+  // 세로 스크롤(다중 페이지 PDF)과 헷갈리지 않도록 가로 이동량이
+  // 세로 이동량보다 뚜렷이 클 때만 곡 전환으로 인식한다.
+  const SWIPE_THRESHOLD = 60;
+
+  function handlePointerDown(e: ReactPointerEvent<HTMLDivElement>) {
+    dragStartRef.current = { x: e.clientX, y: e.clientY };
+  }
+
+  function handlePointerUp(e: ReactPointerEvent<HTMLDivElement>) {
+    const start = dragStartRef.current;
+    dragStartRef.current = null;
+    if (!start) return;
+
+    const deltaX = e.clientX - start.x;
+    const deltaY = e.clientY - start.y;
+
+    if (Math.abs(deltaX) < SWIPE_THRESHOLD || Math.abs(deltaX) < Math.abs(deltaY) * 1.5) return;
+
+    if (deltaX > 0) goPrev();
+    else goNext();
   }
 
   // 전체화면 진입 요청은 호출 측(버튼 클릭 핸들러)에서 이미 수행한다.
@@ -119,7 +145,11 @@ export default function PerformanceMode({ items, initialIndex = 0, onClose }: Pe
         </button>
       </div>
 
-      <div className="relative flex-1 min-h-0 flex items-center justify-center overflow-hidden">
+      <div
+        className="relative flex-1 min-h-0 flex items-center justify-center overflow-hidden"
+        onPointerDown={handlePointerDown}
+        onPointerUp={handlePointerUp}
+      >
         <button
           type="button"
           onClick={goPrev}
@@ -140,6 +170,21 @@ export default function PerformanceMode({ items, initialIndex = 0, onClose }: Pe
           <ChevronRight size={48} />
         </button>
 
+        {item?.songForm && item.songForm.length > 0 && (
+          <div className="absolute top-3 inset-x-0 z-20 flex justify-center px-4 pointer-events-none">
+            <div className="max-w-full flex flex-wrap items-center justify-center gap-x-2 gap-y-1 bg-black/70 backdrop-blur-sm rounded-full px-4 py-2">
+              {item.songForm.map((marker, i) => (
+                <span key={`${marker}-${i}`} className="flex items-center gap-2">
+                  {i > 0 && <span className="text-white/30 text-xs">→</span>}
+                  <span className="text-xs md:text-sm font-semibold text-white whitespace-nowrap">
+                    {marker}
+                  </span>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="w-full h-full flex items-center justify-center px-16">
           {loading && <p className="text-sm text-white/50">불러오는 중...</p>}
           {!loading && error && <p className="text-sm text-red-400 px-6 text-center">{error}</p>}
@@ -147,7 +192,7 @@ export default function PerformanceMode({ items, initialIndex = 0, onClose }: Pe
             !error &&
             signedUrl &&
             (isPdf ? (
-              <iframe src={signedUrl} title={item.title} className="w-full h-full bg-white" />
+              <PdfPageViewer src={signedUrl} />
             ) : (
               // eslint-disable-next-line @next/next/no-img-element
               <img

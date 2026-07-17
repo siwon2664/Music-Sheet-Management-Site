@@ -3,6 +3,7 @@
 import { useMemo, useState, type DragEvent } from 'react';
 import { GripVertical, Trash2 } from 'lucide-react';
 import SheetPreviewModal from '@/components/sheets/SheetPreviewModal';
+import SongFormEditor from './SongFormEditor';
 
 const KEY_OPTIONS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
@@ -14,6 +15,7 @@ export interface SetlistItem {
   transposedKey: string | null;
   note: string;
   fileUrl: string | null;
+  songForm: string[];
 }
 
 interface SetlistPanelProps {
@@ -23,6 +25,7 @@ interface SetlistPanelProps {
   onUpdate: (index: number, patch: Partial<SetlistItem>) => void;
   onMove: (fromIndex: number, toIndex: number) => void;
   onDropSheet: (sheetId: string, index: number) => void;
+  className?: string;
 }
 
 export default function SetlistPanel({
@@ -32,6 +35,7 @@ export default function SetlistPanel({
   onUpdate,
   onMove,
   onDropSheet,
+  className,
 }: SetlistPanelProps) {
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
@@ -64,7 +68,7 @@ export default function SetlistPanel({
   }
 
   return (
-    <section className="bg-white border rounded-lg p-4 md:p-6 flex flex-col gap-3 min-h-0">
+    <section className={`bg-white border rounded-lg p-4 md:p-6 flex flex-col gap-3 min-h-0 ${className ?? ''}`}>
       <h2 className="text-lg font-semibold">현재 콘티 목록</h2>
 
       <div
@@ -143,6 +147,11 @@ export default function SetlistPanel({
                 onChange={(e) => onUpdate(index, { note: e.target.value })}
                 placeholder="송폼 메모 (예: 전주 없이 바로 싱어 카피로 진입)"
                 className="border rounded px-2 py-1.5 text-xs ml-7"
+              />
+
+              <SongFormEditor
+                value={item.songForm}
+                onChange={(next) => onUpdate(index, { songForm: next })}
               />
             </div>
           </div>

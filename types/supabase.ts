@@ -76,6 +76,7 @@ export type Database = {
           note: string | null
           setlist_id: string
           sheet_id: string
+          song_form: string[]
           sort_order: number
           team_id: string
           transposed_key: string | null
@@ -87,6 +88,7 @@ export type Database = {
           note?: string | null
           setlist_id: string
           sheet_id: string
+          song_form?: string[]
           sort_order?: number
           team_id: string
           transposed_key?: string | null
@@ -98,6 +100,7 @@ export type Database = {
           note?: string | null
           setlist_id?: string
           sheet_id?: string
+          song_form?: string[]
           sort_order?: number
           team_id?: string
           transposed_key?: string | null

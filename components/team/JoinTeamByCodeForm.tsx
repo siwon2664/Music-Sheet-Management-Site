@@ -31,7 +31,7 @@ export default function JoinTeamByCodeForm() {
     setLoading(false);
 
     if (joinError) {
-      setError('유효하지 않은 코드입니다. 코드를 다시 확인해주세요.');
+      setError(joinError.message || '유효하지 않은 코드입니다. 코드를 다시 확인해주세요.');
       return;
     }
 

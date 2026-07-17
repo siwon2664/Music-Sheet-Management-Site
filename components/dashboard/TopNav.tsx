@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Library } from 'lucide-react';
+import { Library, ListMusic } from 'lucide-react';
 import ProfileMenu from '@/components/dashboard/ProfileMenu';
 import type { TeamRole } from '@/types/supabase';
 
@@ -15,7 +15,13 @@ export default function TopNav({ teamName, email, displayName, avatarUrl, role }
   return (
     <header className="border-b bg-white">
       <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between gap-4">
-        <h1 className="text-xl md:text-2xl font-bold truncate">{teamName}</h1>
+        <div className="flex items-center gap-2 min-w-0">
+          <ListMusic size={22} className="text-gray-800 shrink-0" />
+          <div className="min-w-0 leading-tight">
+            <h1 className="text-lg md:text-xl font-bold truncate">Band Setlist</h1>
+            <p className="text-xs text-gray-400 truncate">{teamName}</p>
+          </div>
+        </div>
         <div className="flex items-center gap-3 shrink-0">
           <Link
             href="/dashboard/sheets"

@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import { isPdfFile } from '@/lib/storage';
 import DrawingLayer from './DrawingLayer';
 import ImageDrawingStage from './ImageDrawingStage';
+import PdfPageViewer from './PdfPageViewer';
 
 export interface PreviewableSheet {
   id: string;
@@ -126,7 +127,7 @@ export default function SheetPreviewModal({ sheets, initialIndex, teamId, onClos
           <ChevronRight size={36} />
         </button>
 
-        <div className="flex flex-col items-center gap-3 max-w-4xl w-full max-h-full mx-14">
+        <div className="flex flex-col items-center gap-3 max-w-6xl w-full max-h-full mx-10">
           <div className="text-center text-white">
             <p className="font-semibold">{sheet?.title}</p>
             <p className="text-xs text-white/60 mt-0.5">
@@ -136,7 +137,7 @@ export default function SheetPreviewModal({ sheets, initialIndex, teamId, onClos
           </div>
 
           <div
-            className="relative bg-white rounded-lg overflow-hidden flex items-center justify-center w-full h-[75vh]"
+            className="relative bg-white rounded-lg overflow-hidden flex items-center justify-center w-full h-[85vh]"
             onClick={(e) => e.stopPropagation()}
           >
             {loading && <p className="text-sm text-gray-400">불러오는 중...</p>}
@@ -145,7 +146,7 @@ export default function SheetPreviewModal({ sheets, initialIndex, teamId, onClos
               <>
                 {isPdf ? (
                   <div className="relative w-full h-full">
-                    <iframe src={signedUrl} title={sheet.title} className="w-full h-full" />
+                    <PdfPageViewer src={signedUrl} />
                     <DrawingLayer sheetId={actualSheetId} teamId={teamId} />
                   </div>
                 ) : (

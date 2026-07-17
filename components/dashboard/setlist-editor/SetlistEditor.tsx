@@ -1,8 +1,8 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Play, Trash2 } from 'lucide-react';
+import { MoreVertical, Play, Trash2 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import SheetLibraryPanel, { type LibrarySheet } from './SheetLibraryPanel';
 import SetlistPanel, { type SetlistItem } from './SetlistPanel';
@@ -35,6 +35,25 @@ export default function SetlistEditor({
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [performanceMode, setPerformanceMode] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    }
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') setMenuOpen(false);
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
 
   const addedSheetIds = useMemo(() => new Set(items.map((item) => item.sheetId)), [items]);
 
@@ -50,6 +69,7 @@ export default function SetlistEditor({
       transposedKey: null,
       note: '',
       fileUrl: sheet.file_url,
+      songForm: [],
     };
 
     setItems((prev) => {
@@ -112,6 +132,7 @@ export default function SetlistEditor({
           sort_order: index,
           transposed_key: item.transposedKey,
           note: item.note || null,
+          song_form: item.songForm,
         }))
       );
 
@@ -152,17 +173,6 @@ export default function SetlistEditor({
         <div className="flex items-center gap-3">
           {saved && <span className="text-sm text-green-600">저장됨</span>}
           {error && <span className="text-sm text-red-600">{error}</span>}
-          {role === 'LEADER' && (
-            <button
-              type="button"
-              onClick={handleDeleteSetlist}
-              disabled={deleting}
-              className="flex items-center gap-1.5 border border-red-200 text-red-600 rounded px-4 py-2 text-sm font-medium hover:bg-red-50 disabled:opacity-50"
-            >
-              <Trash2 size={14} />
-              {deleting ? '삭제 중...' : '콘티 삭제'}
-            </button>
-          )}
           <button
             type="button"
             onClick={() => {
@@ -185,6 +195,35 @@ export default function SetlistEditor({
           >
             {saving ? '저장 중...' : '콘티 저장하기'}
           </button>
+          {role === 'LEADER' && (
+            <div className="relative" ref={menuRef}>
+              <button
+                type="button"
+                onClick={() => setMenuOpen((prev) => !prev)}
+                className="flex items-center justify-center w-9 h-9 border rounded hover:bg-gray-50"
+                aria-label="콘티 메뉴"
+              >
+                <MoreVertical size={16} />
+              </button>
+
+              {menuOpen && (
+                <div className="absolute right-0 mt-2 w-40 bg-white border rounded-lg shadow-lg py-1 z-50">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      handleDeleteSetlist();
+                    }}
+                    disabled={deleting}
+                    className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50 disabled:opacity-50"
+                  >
+                    <Trash2 size={14} />
+                    {deleting ? '삭제 중...' : '콘티 삭제'}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -194,6 +233,7 @@ export default function SetlistEditor({
           teamId={teamId}
           addedSheetIds={addedSheetIds}
           onAdd={(sheet) => addSheet(sheet)}
+          className="order-2 lg:order-1"
         />
         <SetlistPanel
           items={items}
@@ -202,6 +242,7 @@ export default function SetlistEditor({
           onUpdate={updateItem}
           onMove={moveItem}
           onDropSheet={dropSheetAt}
+          className="order-1 lg:order-2"
         />
       </div>
 

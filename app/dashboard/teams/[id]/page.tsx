@@ -31,7 +31,10 @@ export default async function TeamPage({ params }: { params: { id: string } }) {
 
   return (
     <main className="min-h-screen p-8 max-w-2xl mx-auto flex flex-col gap-8">
-      <Link href="/dashboard" className="text-sm text-gray-500 underline w-fit">
+      <Link
+        href="/dashboard"
+        className="inline-flex items-center gap-1 text-sm text-gray-600 border rounded-lg px-3 py-2 w-fit hover:bg-gray-50 active:bg-gray-100"
+      >
         ← 대시보드로
       </Link>
 

@@ -24,7 +24,10 @@ export default async function ProfilePage() {
   return (
     <main className="min-h-screen bg-gray-50 p-4 md:p-6">
       <div className="max-w-lg w-full mx-auto flex flex-col gap-6">
-        <Link href="/dashboard" className="text-sm text-gray-500 underline w-fit">
+        <Link
+          href="/dashboard"
+          className="inline-flex items-center gap-1 text-sm text-gray-600 border rounded-lg px-3 py-2 w-fit hover:bg-gray-50 active:bg-gray-100"
+        >
           ← 대시보드로
         </Link>
 

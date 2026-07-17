@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
-import { Eraser, Pencil, Trash2, Undo2 } from 'lucide-react';
+import { Eraser, Highlighter, Pencil, Trash2, Undo2 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import type { Json } from '@/types/supabase';
 
@@ -10,11 +10,14 @@ interface Stroke {
   width: number;
   points: [number, number][]; // 0~1로 정규화된 좌표
   isEraser?: boolean;
+  isHighlighter?: boolean;
 }
 
-type Tool = 'pen' | 'eraser';
+type Tool = 'pen' | 'highlighter' | 'eraser';
 
 const ERASER_WIDTH_MULTIPLIER = 4;
+const HIGHLIGHTER_WIDTH_MULTIPLIER = 3;
+const HIGHLIGHTER_OPACITY = 0.4;
 
 interface DrawingLayerProps {
   sheetId: string;
@@ -31,6 +34,7 @@ export default function DrawingLayer({ sheetId, teamId }: DrawingLayerProps) {
   const rowIdRef = useRef<string | null>(null);
   const strokesRef = useRef<Stroke[]>([]);
   const activeStrokeRef = useRef<Stroke | null>(null);
+  const activePointerIdRef = useRef<number | null>(null);
 
   const [active, setActive] = useState(false);
   const [tool, setTool] = useState<Tool>('pen');
@@ -58,9 +62,10 @@ export default function DrawingLayer({ sheetId, teamId }: DrawingLayerProps) {
     for (const stroke of all) {
       if (stroke.points.length < 2) continue;
       ctx.globalCompositeOperation = stroke.isEraser ? 'destination-out' : 'source-over';
+      ctx.globalAlpha = stroke.isHighlighter ? HIGHLIGHTER_OPACITY : 1;
       ctx.strokeStyle = stroke.color;
       ctx.lineWidth = stroke.width;
-      ctx.lineCap = 'round';
+      ctx.lineCap = stroke.isHighlighter ? 'square' : 'round';
       ctx.lineJoin = 'round';
       ctx.beginPath();
       ctx.moveTo(stroke.points[0][0] * w, stroke.points[0][1] * h);
@@ -68,6 +73,7 @@ export default function DrawingLayer({ sheetId, teamId }: DrawingLayerProps) {
       ctx.stroke();
     }
     ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
   }
 
   function resizeCanvas() {
@@ -135,31 +141,48 @@ export default function DrawingLayer({ sheetId, teamId }: DrawingLayerProps) {
 
   function handlePointerDown(e: ReactPointerEvent<HTMLCanvasElement>) {
     if (!active) return;
+    // 애플펜슬로 필기하는 도중 손바닥이 화면에 닿아도 별도의 터치 포인터로
+    // 필기를 방해하지 않도록, 이미 진행 중인 포인터가 있으면 새 입력은 무시한다.
+    if (activePointerIdRef.current !== null) return;
+
     const point = getNormalizedPoint(e);
     if (!point) return;
+
+    e.preventDefault();
+    activePointerIdRef.current = e.pointerId;
+
     try {
       e.currentTarget.setPointerCapture(e.pointerId);
     } catch {
       // 일부 환경에서 포인터 캡처가 불가능해도 그리기 자체는 계속 진행한다.
     }
+    const widthMultiplier =
+      tool === 'eraser' ? ERASER_WIDTH_MULTIPLIER : tool === 'highlighter' ? HIGHLIGHTER_WIDTH_MULTIPLIER : 1;
+
     activeStrokeRef.current = {
       color,
-      width: tool === 'eraser' ? penWidth * ERASER_WIDTH_MULTIPLIER : penWidth,
+      width: penWidth * widthMultiplier,
       points: [point],
       isEraser: tool === 'eraser',
+      isHighlighter: tool === 'highlighter',
     };
     redraw();
   }
 
   function handlePointerMove(e: ReactPointerEvent<HTMLCanvasElement>) {
     if (!active || !activeStrokeRef.current) return;
+    if (e.pointerId !== activePointerIdRef.current) return;
     const point = getNormalizedPoint(e);
     if (!point) return;
+    e.preventDefault();
     activeStrokeRef.current.points.push(point);
     redraw();
   }
 
-  function handlePointerUp() {
+  function handlePointerUp(e: ReactPointerEvent<HTMLCanvasElement>) {
+    if (e.pointerId !== activePointerIdRef.current) return;
+    activePointerIdRef.current = null;
+
     const stroke = activeStrokeRef.current;
     activeStrokeRef.current = null;
     if (stroke && stroke.points.length > 1) {
@@ -263,6 +286,17 @@ export default function DrawingLayer({ sheetId, teamId }: DrawingLayerProps) {
 
             <button
               type="button"
+              onClick={() => setTool('highlighter')}
+              className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
+                tool === 'highlighter' ? 'bg-white text-black' : 'text-white hover:bg-white/20'
+              }`}
+              aria-label="형광펜"
+            >
+              <Highlighter size={16} />
+            </button>
+
+            <button
+              type="button"
               onClick={() => setTool('eraser')}
               className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
                 tool === 'eraser' ? 'bg-white text-black' : 'text-white hover:bg-white/20'
@@ -274,7 +308,7 @@ export default function DrawingLayer({ sheetId, teamId }: DrawingLayerProps) {
 
             <div className="w-px h-5 bg-white/20 shrink-0" />
 
-            {tool === 'pen' && (
+            {tool !== 'eraser' && (
               <>
                 {COLORS.map((c) => (
                   <button

@@ -41,7 +41,7 @@ export default async function SetlistDetailPage({ params }: { params: { id: stri
       .order('title', { ascending: true }),
     supabase
       .from('setlist_sheets')
-      .select('id, sheet_id, sort_order, transposed_key, note')
+      .select('id, sheet_id, sort_order, transposed_key, note, song_form')
       .eq('setlist_id', setlist.id)
       .order('sort_order', { ascending: true }),
   ]);
@@ -61,6 +61,7 @@ export default async function SetlistDetailPage({ params }: { params: { id: stri
         transposedKey: row.transposed_key,
         note: row.note ?? '',
         fileUrl: sheet.file_url,
+        songForm: row.song_form ?? [],
       };
       return item;
     })
@@ -78,7 +79,10 @@ export default async function SetlistDetailPage({ params }: { params: { id: stri
   return (
     <main className="min-h-screen bg-gray-50 p-4 md:p-6">
       <div className="max-w-6xl w-full mx-auto flex flex-col gap-4">
-        <Link href="/dashboard" className="text-sm text-gray-500 underline w-fit">
+        <Link
+          href="/dashboard"
+          className="inline-flex items-center gap-1 text-sm text-gray-600 border rounded-lg px-3 py-2 w-fit hover:bg-gray-50 active:bg-gray-100"
+        >
           ← 대시보드로
         </Link>
 
