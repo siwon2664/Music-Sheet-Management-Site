@@ -30,7 +30,7 @@ export default function SignUpForm({ redirectTo = '/dashboard' }: SignUpFormProp
       password,
       options: {
         data: { display_name: displayName || email.split('@')[0] },
-        emailRedirectTo: `${window.location.origin}/login?redirect=${encodeURIComponent(redirectTo)}`,
+        emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(redirectTo)}`,
       },
     });
 

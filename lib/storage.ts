@@ -6,6 +6,20 @@ export function buildSheetStoragePath(teamId: string, fileName: string): string 
   return `${teamId}/${crypto.randomUUID()}${ext}`;
 }
 
+// 표시용 이미지와 목록 썸네일은 같은 id를 공유하는 쌍으로 관리한다.
+export function buildSheetImagePaths(teamId: string, fileName: string): {
+  id: string;
+  filePath: string;
+  thumbnailPath: string;
+} {
+  const id = crypto.randomUUID();
+  return {
+    id,
+    filePath: `${teamId}/${id}.jpg`,
+    thumbnailPath: `${teamId}/${id}_thumb.jpg`,
+  };
+}
+
 export function stripFileExtension(fileName: string): string {
   return fileName.replace(/\.[a-zA-Z0-9]+$/, '');
 }

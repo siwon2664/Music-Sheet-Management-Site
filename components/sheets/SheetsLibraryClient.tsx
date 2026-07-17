@@ -14,7 +14,9 @@ import {
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { matchesSearch } from '@/lib/hangul';
-import { buildSheetStoragePath, isPdfFile, stripFileExtension } from '@/lib/storage';
+import { isPdfFile, stripFileExtension } from '@/lib/storage';
+import { uploadSheetFile } from '@/lib/sheetUpload';
+import { getCachedSignedUrl, setCachedSignedUrl } from '@/lib/signedUrlCache';
 import type { TeamRole } from '@/types/supabase';
 import UploadSheetModal from './UploadSheetModal';
 import CreateSetlistFromSelectionModal from './CreateSetlistFromSelectionModal';
@@ -29,6 +31,7 @@ export interface SheetRow {
   bpm: number | null;
   tags: string[];
   file_url: string | null;
+  thumbnail_url: string | null;
   created_at: string;
 }
 
@@ -80,7 +83,8 @@ export default function SheetsLibraryClient({ teamId, role, initialSheets }: She
 
   const allSelected = filteredSorted.length > 0 && selectedIds.size === filteredSorted.length;
 
-  // 이미지 파일들의 썸네일용 signed URL을 한 번에 배치로 받아온다 (PDF는 아이콘만 표시).
+  // 이미지 파일들의 썸네일용 signed URL을 받아온다 (PDF는 아이콘만 표시).
+  // 세션 내 캐시를 먼저 확인해 이미 발급받은 URL은 페이지를 다시 열어도 재요청하지 않는다.
   useEffect(() => {
     const imageSheets = sheets.filter((sheet) => sheet.file_url && !isPdfFile(sheet.file_url));
     if (imageSheets.length === 0) return;
@@ -88,16 +92,39 @@ export default function SheetsLibraryClient({ teamId, role, initialSheets }: She
     let cancelled = false;
 
     async function loadThumbnails() {
-      const paths = imageSheets.map((sheet) => sheet.file_url as string);
-      const { data } = await supabase.storage.from('sheets').createSignedUrls(paths, 60 * 60);
+      const cached: Record<string, string> = {};
+      const uncached: { sheetId: string; path: string }[] = [];
+
+      for (const sheet of imageSheets) {
+        const path = (sheet.thumbnail_url ?? sheet.file_url) as string;
+        const hit = getCachedSignedUrl(path);
+        if (hit) {
+          cached[sheet.id] = hit;
+        } else {
+          uncached.push({ sheetId: sheet.id, path });
+        }
+      }
+
+      if (Object.keys(cached).length > 0) {
+        setThumbnailUrls((prev) => ({ ...prev, ...cached }));
+      }
+
+      if (uncached.length === 0) return;
+
+      const { data } = await supabase.storage
+        .from('sheets')
+        .createSignedUrls(uncached.map((item) => item.path), 60 * 60);
 
       if (cancelled || !data) return;
 
       setThumbnailUrls((prev) => {
         const next = { ...prev };
-        imageSheets.forEach((sheet, i) => {
+        uncached.forEach((item, i) => {
           const signedUrl = data[i]?.signedUrl;
-          if (signedUrl) next[sheet.id] = signedUrl;
+          if (signedUrl) {
+            next[item.sheetId] = signedUrl;
+            setCachedSignedUrl(item.path, signedUrl);
+          }
         });
         return next;
       });
@@ -178,11 +205,10 @@ export default function SheetsLibraryClient({ teamId, role, initialSheets }: She
     const failed: string[] = [];
 
     for (const file of files) {
-      const path = buildSheetStoragePath(teamId, file.name);
+      const { data: uploadedFile, error: uploadError } = await uploadSheetFile(supabase, teamId, file);
 
-      const { error: uploadError } = await supabase.storage.from('sheets').upload(path, file);
-      if (uploadError) {
-        failed.push(`${file.name}: ${uploadError.message}`);
+      if (uploadError || !uploadedFile) {
+        failed.push(`${file.name}: ${uploadError ?? '업로드에 실패했습니다.'}`);
         setBulkUploading((prev) => (prev ? { ...prev, done: prev.done + 1 } : prev));
         continue;
       }
@@ -192,10 +218,11 @@ export default function SheetsLibraryClient({ teamId, role, initialSheets }: She
         .insert({
           team_id: teamId,
           title: stripFileExtension(file.name),
-          file_url: path,
+          file_url: uploadedFile.filePath,
+          thumbnail_url: uploadedFile.thumbnailPath,
           created_by: user.id,
         })
-        .select('id, title, composer, key, bpm, tags, file_url, created_at')
+        .select('id, title, composer, key, bpm, tags, file_url, thumbnail_url, created_at')
         .single();
 
       if (insertError) {

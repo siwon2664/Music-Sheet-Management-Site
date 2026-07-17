@@ -3,7 +3,7 @@
 import { useState, type FormEvent } from 'react';
 import { UploadCloud, X } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
-import { buildSheetStoragePath } from '@/lib/storage';
+import { uploadSheetFile } from '@/lib/sheetUpload';
 import type { SheetRow } from './SheetsLibraryClient';
 
 interface UploadSheetModalProps {
@@ -44,13 +44,11 @@ export default function UploadSheetModal({ teamId, onClose, onUploaded }: Upload
       return;
     }
 
-    const path = buildSheetStoragePath(teamId, file.name);
+    const { data: uploadedFile, error: uploadError } = await uploadSheetFile(supabase, teamId, file);
 
-    const { error: uploadError } = await supabase.storage.from('sheets').upload(path, file);
-
-    if (uploadError) {
+    if (uploadError || !uploadedFile) {
       setLoading(false);
-      setError(uploadError.message);
+      setError(uploadError ?? '파일을 업로드하지 못했습니다.');
       return;
     }
 
@@ -62,10 +60,11 @@ export default function UploadSheetModal({ teamId, onClose, onUploaded }: Upload
         composer: composer || null,
         key: key || null,
         bpm: bpm ? Number(bpm) : null,
-        file_url: path,
+        file_url: uploadedFile.filePath,
+        thumbnail_url: uploadedFile.thumbnailPath,
         created_by: user.id,
       })
-      .select('id, title, composer, key, bpm, tags, file_url, created_at')
+      .select('id, title, composer, key, bpm, tags, file_url, thumbnail_url, created_at')
       .single();
 
     setLoading(false);

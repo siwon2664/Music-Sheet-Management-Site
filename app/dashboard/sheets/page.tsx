@@ -28,7 +28,7 @@ export default async function SheetsLibraryPage() {
 
   const { data: sheets } = await supabase
     .from('sheets')
-    .select('id, title, composer, key, bpm, tags, file_url, created_at')
+    .select('id, title, composer, key, bpm, tags, file_url, thumbnail_url, created_at')
     .eq('team_id', membership.team_id)
     .order('title', { ascending: true });
 
