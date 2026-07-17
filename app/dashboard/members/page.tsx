@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import MembersManager, { type MemberRow } from '@/components/dashboard/members/MembersManager';
-import InviteLinkSection from '@/components/dashboard/members/InviteLinkSection';
+import InviteLinkSection from '@/components/team/InviteLinkSection';
 
 export default async function MembersPage() {
   const supabase = await createClient();

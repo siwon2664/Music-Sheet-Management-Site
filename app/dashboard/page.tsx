@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import CreateTeamForm from '@/components/team/CreateTeamForm';
+import JoinTeamByCodeForm from '@/components/team/JoinTeamByCodeForm';
 import TopNav from '@/components/dashboard/TopNav';
 import DashboardCalendar from '@/components/dashboard/DashboardCalendar';
 import FixedSetlists from '@/components/dashboard/FixedSetlists';
@@ -40,14 +41,20 @@ export default async function DashboardPage({
 
   if (!membership) {
     return (
-      <main className="min-h-screen p-8 max-w-md mx-auto flex flex-col gap-6">
+      <main className="min-h-screen p-8 max-w-md mx-auto flex flex-col gap-8">
         <header>
           <h1 className="text-2xl font-bold">대시보드</h1>
           <p className="text-sm text-gray-500 mt-1">
-            아직 속한 팀이 없습니다. 아래에서 새 팀을 만들어보세요.
+            아직 속한 팀이 없습니다. 새 팀을 만들거나, 팀장에게 받은 코드로 참여해보세요.
           </p>
         </header>
         <CreateTeamForm />
+        <div className="flex items-center gap-3 text-xs text-gray-400">
+          <div className="flex-1 h-px bg-gray-200" />
+          또는
+          <div className="flex-1 h-px bg-gray-200" />
+        </div>
+        <JoinTeamByCodeForm />
       </main>
     );
   }
