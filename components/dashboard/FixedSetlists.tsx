@@ -10,7 +10,7 @@ export default function FixedSetlists({ setlists }: { setlists: FixedSetlist[] }
   if (setlists.length === 0) return null;
 
   return (
-    <section className="mt-6 bg-white border rounded-lg p-4 md:p-6">
+    <section className="mb-6 bg-white border rounded-lg p-4 md:p-6">
       <h2 className="text-sm font-semibold text-gray-500 mb-3">고정 콘티</h2>
       <div className="flex flex-wrap gap-2">
         {setlists.map((setlist) => (

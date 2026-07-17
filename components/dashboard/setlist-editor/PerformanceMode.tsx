@@ -17,9 +17,9 @@ export default function PerformanceMode({ items, initialIndex = 0, onClose }: Pe
   const supabase = createClient();
 
   const [index, setIndex] = useState(initialIndex);
-  const [signedUrl, setSignedUrl] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
+  const [preloading, setPreloading] = useState(true);
+  const [preloadError, setPreloadError] = useState<string | null>(null);
 
   const item = items[index];
   const effectiveKey = item ? item.transposedKey ?? item.originalKey : null;
@@ -86,47 +86,79 @@ export default function PerformanceMode({ items, initialIndex = 0, onClose }: Pe
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items.length]);
 
+  // 곡을 넘길 때마다 signed URL을 새로 발급받으면 그때마다 네트워크 왕복이 생겨
+  // 딜레이가 느껴진다. 연주 모드에 들어가는 시점에 콘티 전체의 signed URL을
+  // 한 번에 받아두고, 곡 전환은 이미 받아둔 URL을 그냥 꺼내 쓰기만 한다.
   useEffect(() => {
     let cancelled = false;
 
-    async function loadPreview() {
-      setLoading(true);
-      setError(null);
-      setSignedUrl(null);
+    async function preloadAll() {
+      setPreloading(true);
+      setPreloadError(null);
 
-      if (!item?.fileUrl) {
-        setLoading(false);
-        setError('악보 파일이 없습니다.');
+      const validItems = items.filter(
+        (it): it is SetlistItem & { fileUrl: string } => !!it.fileUrl
+      );
+
+      if (validItems.length === 0) {
+        if (!cancelled) setPreloading(false);
         return;
       }
 
       const { data, error: signError } = await supabase.storage
         .from('sheets')
-        .createSignedUrl(item.fileUrl, 60 * 10);
+        .createSignedUrls(
+          validItems.map((it) => it.fileUrl),
+          60 * 60
+        );
 
       if (cancelled) return;
-      setLoading(false);
 
       if (signError || !data) {
-        setError(signError?.message ?? '파일을 불러올 수 없습니다.');
+        setPreloadError(signError?.message ?? '악보를 불러오지 못했습니다.');
+        setPreloading(false);
         return;
       }
 
-      setSignedUrl(data.signedUrl);
+      const map: Record<string, string> = {};
+      validItems.forEach((it, i) => {
+        const url = data[i]?.signedUrl;
+        if (url) map[it.id] = url;
+      });
+
+      setSignedUrls(map);
+      setPreloading(false);
     }
 
-    loadPreview();
+    preloadAll();
 
     return () => {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [index]);
+  }, []);
+
+  // URL을 다 받으면 파일 자체(이미지/PDF)도 백그라운드에서 미리 요청해
+  // 브라우저 캐시에 데워둔다. 실제로 그 곡으로 넘어갔을 때 PdfPageViewer나
+  // <img>가 네트워크가 아니라 캐시에서 바로 읽도록 하기 위함이다.
+  useEffect(() => {
+    Object.values(signedUrls).forEach((url) => {
+      fetch(url).catch(() => {});
+    });
+  }, [signedUrls]);
+
+  const signedUrl = item?.id ? signedUrls[item.id] ?? null : null;
+  const loading = preloading;
+  const error = !item?.fileUrl
+    ? '악보 파일이 없습니다.'
+    : !preloading && !signedUrl
+      ? preloadError ?? '파일을 불러올 수 없습니다.'
+      : null;
 
   const isPdf = item?.fileUrl ? isPdfFile(item.fileUrl) : false;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black flex flex-col">
+    <div className="fixed inset-0 z-50 bg-black flex flex-col touch-none">
       <div className="flex items-center justify-between px-4 py-3 text-white/90">
         <div className="min-w-0">
           <p className="font-semibold truncate">{item?.title}</p>
@@ -154,7 +186,7 @@ export default function PerformanceMode({ items, initialIndex = 0, onClose }: Pe
           type="button"
           onClick={goPrev}
           disabled={index === 0}
-          className="absolute left-2 top-1/2 -translate-y-1/2 z-10 text-white/70 hover:text-white disabled:opacity-20 disabled:cursor-not-allowed"
+          className="absolute left-0 top-0 h-full w-20 md:w-28 z-10 flex items-center justify-start pl-2 text-white/70 hover:text-white active:text-white disabled:opacity-20 disabled:cursor-not-allowed"
           aria-label="이전 곡"
         >
           <ChevronLeft size={48} />
@@ -164,7 +196,7 @@ export default function PerformanceMode({ items, initialIndex = 0, onClose }: Pe
           type="button"
           onClick={goNext}
           disabled={index === items.length - 1}
-          className="absolute right-2 top-1/2 -translate-y-1/2 z-10 text-white/70 hover:text-white disabled:opacity-20 disabled:cursor-not-allowed"
+          className="absolute right-0 top-0 h-full w-20 md:w-28 z-10 flex items-center justify-end pr-2 text-white/70 hover:text-white active:text-white disabled:opacity-20 disabled:cursor-not-allowed"
           aria-label="다음 곡"
         >
           <ChevronRight size={48} />
@@ -185,7 +217,7 @@ export default function PerformanceMode({ items, initialIndex = 0, onClose }: Pe
           </div>
         )}
 
-        <div className="w-full h-full flex items-center justify-center px-16">
+        <div className="w-full h-full flex items-center justify-center px-20 md:px-28">
           {loading && <p className="text-sm text-white/50">불러오는 중...</p>}
           {!loading && error && <p className="text-sm text-red-400 px-6 text-center">{error}</p>}
           {!loading &&

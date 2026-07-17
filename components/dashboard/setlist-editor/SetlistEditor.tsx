@@ -2,8 +2,9 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { MoreVertical, Play, Trash2 } from 'lucide-react';
+import { Download, MoreVertical, Play, Trash2 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import { exportSetlistToPdf } from '@/lib/exportSetlistPdf';
 import SheetLibraryPanel, { type LibrarySheet } from './SheetLibraryPanel';
 import SetlistPanel, { type SetlistItem } from './SetlistPanel';
 import PerformanceMode from './PerformanceMode';
@@ -11,6 +12,7 @@ import type { TeamRole } from '@/types/supabase';
 
 interface SetlistEditorProps {
   setlistId: string;
+  setlistTitle: string;
   teamId: string;
   role: TeamRole;
   sheets: LibrarySheet[];
@@ -21,6 +23,7 @@ let tempIdCounter = 0;
 
 export default function SetlistEditor({
   setlistId,
+  setlistTitle,
   teamId,
   role,
   sheets,
@@ -37,6 +40,9 @@ export default function SetlistEditor({
   const [performanceMode, setPerformanceMode] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const [showDownloadModal, setShowDownloadModal] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -166,6 +172,38 @@ export default function SetlistEditor({
     router.refresh();
   }
 
+  async function handleDownload(includeNotes: boolean) {
+    setDownloading(true);
+    setDownloadError(null);
+
+    try {
+      const { blob, skipped } = await exportSetlistToPdf(
+        supabase,
+        items.map((item) => ({ title: item.title, fileUrl: item.fileUrl, note: item.note })),
+        { includeNotes }
+      );
+
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${setlistTitle || '콘티'}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+
+      if (skipped.length > 0) {
+        setDownloadError(`다음 악보는 포함하지 못했습니다: ${skipped.join(', ')}`);
+      } else {
+        setShowDownloadModal(false);
+      }
+    } catch (err) {
+      setDownloadError(err instanceof Error ? err.message : '다운로드에 실패했습니다.');
+    } finally {
+      setDownloading(false);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -195,19 +233,33 @@ export default function SetlistEditor({
           >
             {saving ? '저장 중...' : '콘티 저장하기'}
           </button>
-          {role === 'LEADER' && (
-            <div className="relative" ref={menuRef}>
-              <button
-                type="button"
-                onClick={() => setMenuOpen((prev) => !prev)}
-                className="flex items-center justify-center w-9 h-9 border rounded hover:bg-gray-50"
-                aria-label="콘티 메뉴"
-              >
-                <MoreVertical size={16} />
-              </button>
+          <div className="relative" ref={menuRef}>
+            <button
+              type="button"
+              onClick={() => setMenuOpen((prev) => !prev)}
+              className="flex items-center justify-center w-9 h-9 border rounded hover:bg-gray-50"
+              aria-label="콘티 메뉴"
+            >
+              <MoreVertical size={16} />
+            </button>
 
-              {menuOpen && (
-                <div className="absolute right-0 mt-2 w-40 bg-white border rounded-lg shadow-lg py-1 z-50">
+            {menuOpen && (
+              <div className="absolute right-0 mt-2 w-44 bg-white border rounded-lg shadow-lg py-1 z-50">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setDownloadError(null);
+                    setShowDownloadModal(true);
+                  }}
+                  disabled={items.length === 0}
+                  className="w-full flex items-center gap-2 px-4 py-2 text-sm hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <Download size={14} />
+                  콘티 다운로드
+                </button>
+
+                {role === 'LEADER' && (
                   <button
                     type="button"
                     onClick={() => {
@@ -220,10 +272,10 @@ export default function SetlistEditor({
                     <Trash2 size={14} />
                     {deleting ? '삭제 중...' : '콘티 삭제'}
                   </button>
-                </div>
-              )}
-            </div>
-          )}
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -248,6 +300,47 @@ export default function SetlistEditor({
 
       {performanceMode && (
         <PerformanceMode items={items} onClose={() => setPerformanceMode(false)} />
+      )}
+
+      {showDownloadModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-lg shadow-lg w-full max-w-sm p-6">
+            <h2 className="text-lg font-semibold mb-2">콘티 다운로드</h2>
+            <p className="text-sm text-gray-500 mb-4">
+              콘티에 담긴 악보를 순서대로 합쳐서 하나의 PDF로 다운로드합니다. 곡마다 적어둔 메모도 함께
+              포함할까요?
+            </p>
+
+            {downloadError && <p className="text-sm text-red-600 mb-4">{downloadError}</p>}
+
+            <div className="flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={() => handleDownload(true)}
+                disabled={downloading}
+                className="bg-black text-white rounded px-4 py-2 text-sm font-medium disabled:opacity-50"
+              >
+                {downloading ? '만드는 중...' : '메모 포함해서 다운로드'}
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDownload(false)}
+                disabled={downloading}
+                className="border rounded px-4 py-2 text-sm font-medium hover:bg-gray-50 disabled:opacity-50"
+              >
+                {downloading ? '만드는 중...' : '악보만 다운로드'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowDownloadModal(false)}
+                disabled={downloading}
+                className="text-sm text-gray-500 hover:text-gray-900 mt-1 disabled:opacity-50"
+              >
+                취소
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

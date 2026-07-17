@@ -102,7 +102,10 @@ export default function PdfPageViewer({ src }: PdfPageViewerProps) {
   }, [src]);
 
   return (
-    <div ref={scrollRef} className="relative w-full h-full overflow-auto bg-white">
+    <div
+      ref={scrollRef}
+      className="relative w-full h-full overflow-auto bg-white select-none [-webkit-touch-callout:none]"
+    >
       {loading && <p className="text-sm text-gray-400 p-4">불러오는 중...</p>}
       {error && <p className="text-sm text-red-500 p-4">{error}</p>}
       <div ref={pagesRef} className="flex flex-col items-center" />

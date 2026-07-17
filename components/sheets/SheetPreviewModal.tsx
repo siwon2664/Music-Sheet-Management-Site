@@ -33,6 +33,33 @@ export default function SheetPreviewModal({ sheets, initialIndex, teamId, onClos
 
   const sheet = sheets[index];
 
+  // 미리보기가 열려있는 동안 뒤쪽 페이지가 같이 스크롤되지 않도록 막는다.
+  // iOS Safari는 overflow:hidden만으로는 배경이 여전히 스크롤/바운스될 수 있어서
+  // body를 fixed로 고정하고 닫을 때 원래 스크롤 위치로 복원한다.
+  useEffect(() => {
+    const scrollY = window.scrollY;
+    const body = document.body;
+    const original = {
+      overflow: body.style.overflow,
+      position: body.style.position,
+      top: body.style.top,
+      width: body.style.width,
+    };
+
+    body.style.overflow = 'hidden';
+    body.style.position = 'fixed';
+    body.style.top = `-${scrollY}px`;
+    body.style.width = '100%';
+
+    return () => {
+      body.style.overflow = original.overflow;
+      body.style.position = original.position;
+      body.style.top = original.top;
+      body.style.width = original.width;
+      window.scrollTo(0, scrollY);
+    };
+  }, []);
+
   function goPrev() {
     setIndex((prev) => Math.max(0, prev - 1));
   }
@@ -145,7 +172,7 @@ export default function SheetPreviewModal({ sheets, initialIndex, teamId, onClos
             {!loading && !error && signedUrl && actualSheetId && (
               <>
                 {isPdf ? (
-                  <div className="relative w-full h-full">
+                  <div className="relative w-full h-full select-none [-webkit-touch-callout:none]">
                     <PdfPageViewer src={signedUrl} />
                     <DrawingLayer sheetId={actualSheetId} teamId={teamId} />
                   </div>

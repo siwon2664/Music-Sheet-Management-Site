@@ -52,14 +52,18 @@ export default function ImageDrawingStage({ src, alt, sheetId, teamId }: ImageDr
   }, []);
 
   return (
-    <div ref={outerRef} className="relative w-full h-full flex items-center justify-center">
+    <div
+      ref={outerRef}
+      className="relative w-full h-full flex items-center justify-center select-none [-webkit-touch-callout:none]"
+    >
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         ref={imgRef}
         src={src}
         alt={alt}
         onLoad={measure}
-        className="block max-w-full max-h-full object-contain"
+        draggable={false}
+        className="block max-w-full max-h-full object-contain select-none [-webkit-touch-callout:none]"
       />
       {stageRect && (
         <div

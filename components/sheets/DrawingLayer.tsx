@@ -243,7 +243,7 @@ export default function DrawingLayer({ sheetId, teamId }: DrawingLayerProps) {
   }
 
   return (
-    <div ref={containerRef} className="absolute inset-0">
+    <div ref={containerRef} className="absolute inset-0 select-none [-webkit-touch-callout:none]">
       <canvas
         ref={canvasRef}
         onPointerDown={handlePointerDown}
@@ -251,7 +251,9 @@ export default function DrawingLayer({ sheetId, teamId }: DrawingLayerProps) {
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
         style={{ touchAction: 'none' }}
-        className={`absolute inset-0 ${active ? 'cursor-crosshair' : 'pointer-events-none'}`}
+        className={`absolute inset-0 select-none [-webkit-touch-callout:none] ${
+          active ? 'cursor-crosshair' : 'pointer-events-none'
+        }`}
       />
 
       <div

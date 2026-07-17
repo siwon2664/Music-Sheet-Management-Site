@@ -58,7 +58,9 @@ export default function SongFormEditor({ value, onChange }: SongFormEditorProps)
       <button
         type="button"
         onClick={() => setOpen((prev) => !prev)}
-        className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-900"
+        className={`flex items-center gap-1 text-xs font-medium border rounded px-2 py-1 hover:bg-gray-50 ${
+          open ? 'bg-gray-900 text-white border-gray-900 hover:bg-gray-900' : 'bg-white text-gray-600'
+        }`}
       >
         <ListMusic size={12} />
         {open ? '순서 편집 닫기' : value.length > 0 ? '순서 편집' : '순서 추가'}

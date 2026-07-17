@@ -96,6 +96,7 @@ export default async function SetlistDetailPage({ params }: { params: { id: stri
 
         <SetlistEditor
           setlistId={setlist.id}
+          setlistTitle={setlist.title}
           teamId={setlist.team_id}
           role={membership?.role ?? 'MEMBER'}
           sheets={librarySheets}
