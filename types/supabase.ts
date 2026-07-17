@@ -133,7 +133,7 @@ export type Database = {
       setlists: {
         Row: {
           created_at: string
-          created_by: string
+          created_by: string | null
           description: string | null
           event_date: string | null
           id: string
@@ -143,7 +143,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
-          created_by: string
+          created_by?: string | null
           description?: string | null
           event_date?: string | null
           id?: string
@@ -153,7 +153,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
-          created_by?: string
+          created_by?: string | null
           description?: string | null
           event_date?: string | null
           id?: string
@@ -183,7 +183,7 @@ export type Database = {
           bpm: number | null
           composer: string | null
           created_at: string
-          created_by: string
+          created_by: string | null
           file_url: string | null
           id: string
           key: string | null
@@ -198,7 +198,7 @@ export type Database = {
           bpm?: number | null
           composer?: string | null
           created_at?: string
-          created_by: string
+          created_by?: string | null
           file_url?: string | null
           id?: string
           key?: string | null
@@ -213,7 +213,7 @@ export type Database = {
           bpm?: number | null
           composer?: string | null
           created_at?: string
-          created_by?: string
+          created_by?: string | null
           file_url?: string | null
           id?: string
           key?: string | null
