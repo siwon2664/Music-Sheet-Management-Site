@@ -15,12 +15,19 @@ interface ImageDrawingStageProps {
   alt: string;
   sheetId: string;
   teamId: string;
+  interactive?: boolean;
 }
 
 // object-contain 이미지는 컨테이너 안에서 레터박싱(여백)이 생길 수 있어서,
 // 드로잉 캔버스를 컨테이너 전체가 아니라 실제 렌더링된 이미지 영역에만
 // 정확히 겹치도록 이미지의 실제 위치/크기를 측정해서 배치한다.
-export default function ImageDrawingStage({ src, alt, sheetId, teamId }: ImageDrawingStageProps) {
+export default function ImageDrawingStage({
+  src,
+  alt,
+  sheetId,
+  teamId,
+  interactive = true,
+}: ImageDrawingStageProps) {
   const outerRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
   const [stageRect, setStageRect] = useState<StageRect | null>(null);
@@ -75,7 +82,7 @@ export default function ImageDrawingStage({ src, alt, sheetId, teamId }: ImageDr
             height: stageRect.height,
           }}
         >
-          <DrawingLayer sheetId={sheetId} teamId={teamId} />
+          <DrawingLayer sheetId={sheetId} teamId={teamId} interactive={interactive} />
         </div>
       )}
     </div>

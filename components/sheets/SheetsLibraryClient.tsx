@@ -7,6 +7,7 @@ import {
   ArrowUp,
   ArrowUpDown,
   CalendarPlus,
+  Pencil,
   Plus,
   Search,
   Trash2,
@@ -19,6 +20,7 @@ import { uploadSheetFile } from '@/lib/sheetUpload';
 import { getCachedSignedUrl, setCachedSignedUrl } from '@/lib/signedUrlCache';
 import type { TeamRole } from '@/types/supabase';
 import UploadSheetModal from './UploadSheetModal';
+import EditSheetModal from './EditSheetModal';
 import CreateSetlistFromSelectionModal from './CreateSetlistFromSelectionModal';
 import SheetPreviewModal from './SheetPreviewModal';
 import SheetThumbnail from './SheetThumbnail';
@@ -54,6 +56,7 @@ export default function SheetsLibraryClient({ teamId, role, initialSheets }: She
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showUploadModal, setShowUploadModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
   const [showCreateSetlistModal, setShowCreateSetlistModal] = useState(false);
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -313,13 +316,25 @@ export default function SheetsLibraryClient({ teamId, role, initialSheets }: She
           />
         </div>
 
-        <button
-          type="button"
-          onClick={() => setShowUploadModal(true)}
-          className="flex items-center gap-2 text-sm font-medium border rounded px-4 py-2 hover:bg-gray-50"
-        >
-          <Plus size={16} />새 악보 추가
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setShowEditModal(true)}
+            disabled={selectedSheets.length !== 1}
+            title={selectedSheets.length !== 1 ? '악보 하나를 선택하면 정보를 수정할 수 있습니다.' : undefined}
+            className="flex items-center gap-2 text-sm font-medium border rounded px-4 py-2 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <Pencil size={16} />
+            편집하기
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowUploadModal(true)}
+            className="flex items-center gap-2 text-sm font-medium border rounded px-4 py-2 hover:bg-gray-50"
+          >
+            <Plus size={16} />새 악보 추가
+          </button>
+        </div>
       </div>
 
       {selectedIds.size > 0 && (
@@ -445,6 +460,19 @@ export default function SheetsLibraryClient({ teamId, role, initialSheets }: She
           onUploaded={(sheet) => {
             setSheets((prev) => [sheet, ...prev]);
             setShowUploadModal(false);
+            router.refresh();
+          }}
+        />
+      )}
+
+      {showEditModal && selectedSheets.length === 1 && (
+        <EditSheetModal
+          sheet={selectedSheets[0]}
+          teamId={teamId}
+          onClose={() => setShowEditModal(false)}
+          onUpdated={(updated) => {
+            setSheets((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
+            setShowEditModal(false);
             router.refresh();
           }}
         />

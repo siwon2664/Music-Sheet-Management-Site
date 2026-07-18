@@ -26,12 +26,13 @@ export default function SetlistEditor({
   setlistTitle,
   teamId,
   role,
-  sheets,
+  sheets: initialSheets,
   initialItems,
 }: SetlistEditorProps) {
   const router = useRouter();
   const supabase = createClient();
 
+  const [sheets, setSheets] = useState<LibrarySheet[]>(initialSheets);
   const [items, setItems] = useState<SetlistItem[]>(initialItems);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -76,6 +77,7 @@ export default function SetlistEditor({
       note: '',
       fileUrl: sheet.file_url,
       songForm: [],
+      bpm: sheet.bpm,
     };
 
     setItems((prev) => {
@@ -111,6 +113,16 @@ export default function SetlistEditor({
     const sheet = sheets.find((s) => s.id === sheetId);
     if (!sheet) return;
     addSheet(sheet, index);
+  }
+
+  // 악보의 bpm은 콘티 소속이 아니라 악보 자체의 값이라, 콘티를 저장하기 전이라도
+  // 바로 sheets 테이블에 반영해서 다음에 이 악보를 쓸 때도 값이 남아있게 한다.
+  async function updateSheetBpm(sheetId: string, bpm: number | null) {
+    setSheets((prev) => prev.map((s) => (s.id === sheetId ? { ...s, bpm } : s)));
+    setItems((prev) => prev.map((item) => (item.sheetId === sheetId ? { ...item, bpm } : item)));
+
+    const { error: updateError } = await supabase.from('sheets').update({ bpm }).eq('id', sheetId);
+    if (updateError) setError(updateError.message);
   }
 
   async function handleSave() {
@@ -294,12 +306,13 @@ export default function SetlistEditor({
           onUpdate={updateItem}
           onMove={moveItem}
           onDropSheet={dropSheetAt}
+          onUpdateBpm={updateSheetBpm}
           className="order-1 lg:order-2"
         />
       </div>
 
       {performanceMode && (
-        <PerformanceMode items={items} onClose={() => setPerformanceMode(false)} />
+        <PerformanceMode items={items} teamId={teamId} onClose={() => setPerformanceMode(false)} />
       )}
 
       {showDownloadModal && (

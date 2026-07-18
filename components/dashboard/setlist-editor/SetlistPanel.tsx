@@ -16,6 +16,7 @@ export interface SetlistItem {
   note: string;
   fileUrl: string | null;
   songForm: string[];
+  bpm: number | null;
 }
 
 interface SetlistPanelProps {
@@ -25,6 +26,7 @@ interface SetlistPanelProps {
   onUpdate: (index: number, patch: Partial<SetlistItem>) => void;
   onMove: (fromIndex: number, toIndex: number) => void;
   onDropSheet: (sheetId: string, index: number) => void;
+  onUpdateBpm: (sheetId: string, bpm: number | null) => void;
   className?: string;
 }
 
@@ -35,6 +37,7 @@ export default function SetlistPanel({
   onUpdate,
   onMove,
   onDropSheet,
+  onUpdateBpm,
   className,
 }: SetlistPanelProps) {
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
@@ -138,6 +141,19 @@ export default function SetlistPanel({
                       </option>
                     ))}
                   </select>
+                </label>
+
+                <label className="text-xs text-gray-500 flex items-center gap-1">
+                  BPM
+                  <input
+                    type="number"
+                    min={0}
+                    value={item.bpm ?? ''}
+                    onChange={(e) => onUpdate(index, { bpm: e.target.value ? Number(e.target.value) : null })}
+                    onBlur={(e) => onUpdateBpm(item.sheetId, e.target.value ? Number(e.target.value) : null)}
+                    placeholder="-"
+                    className="w-14 border rounded px-2 py-1 text-xs"
+                  />
                 </label>
               </div>
 

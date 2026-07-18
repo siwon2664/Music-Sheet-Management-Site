@@ -5,15 +5,18 @@ import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { isPdfFile } from '@/lib/storage';
 import PdfPageViewer from '@/components/sheets/PdfPageViewer';
+import DrawingLayer from '@/components/sheets/DrawingLayer';
+import ImageDrawingStage from '@/components/sheets/ImageDrawingStage';
 import type { SetlistItem } from './SetlistPanel';
 
 interface PerformanceModeProps {
   items: SetlistItem[];
+  teamId: string;
   initialIndex?: number;
   onClose: () => void;
 }
 
-export default function PerformanceMode({ items, initialIndex = 0, onClose }: PerformanceModeProps) {
+export default function PerformanceMode({ items, teamId, initialIndex = 0, onClose }: PerformanceModeProps) {
   const supabase = createClient();
 
   const [index, setIndex] = useState(initialIndex);
@@ -162,9 +165,16 @@ export default function PerformanceMode({ items, initialIndex = 0, onClose }: Pe
       <div className="flex items-center justify-between px-4 py-3 text-white/90">
         <div className="min-w-0">
           <p className="font-semibold truncate">{item?.title}</p>
-          <p className="text-xs text-white/50 mt-0.5">
-            {index + 1} / {items.length}
-            {effectiveKey ? ` · Key ${effectiveKey}` : ''}
+          <p className="text-xs text-white/50 mt-0.5 flex items-center gap-1.5 flex-wrap">
+            <span>
+              {index + 1} / {items.length}
+              {effectiveKey ? ` · Key ${effectiveKey}` : ''}
+            </span>
+            {item?.bpm && (
+              <span className="text-[10px] font-semibold bg-white/10 text-white rounded-full px-2 py-0.5">
+                {item.bpm} BPM
+              </span>
+            )}
           </p>
         </div>
         <button
@@ -223,14 +233,19 @@ export default function PerformanceMode({ items, initialIndex = 0, onClose }: Pe
           {!loading &&
             !error &&
             signedUrl &&
+            item?.sheetId &&
             (isPdf ? (
-              <PdfPageViewer src={signedUrl} />
+              <div className="relative w-full h-full select-none [-webkit-touch-callout:none]">
+                <PdfPageViewer src={signedUrl} />
+                <DrawingLayer sheetId={item.sheetId} teamId={teamId} interactive={false} />
+              </div>
             ) : (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
+              <ImageDrawingStage
                 src={signedUrl}
                 alt={item.title}
-                className="max-w-full max-h-full object-contain"
+                sheetId={item.sheetId}
+                teamId={teamId}
+                interactive={false}
               />
             ))}
         </div>

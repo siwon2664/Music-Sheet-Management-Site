@@ -22,12 +22,14 @@ const HIGHLIGHTER_OPACITY = 0.4;
 interface DrawingLayerProps {
   sheetId: string;
   teamId: string;
+  // 연주 모드처럼 기존 마킹을 보여주기만 하고 편집 도구는 노출하지 않을 때 false로 설정.
+  interactive?: boolean;
 }
 
 const COLORS = ['#ef4444', '#f59e0b', '#22c55e', '#3b82f6', '#a855f7', '#111827'];
 const WIDTHS = [2, 4, 8];
 
-export default function DrawingLayer({ sheetId, teamId }: DrawingLayerProps) {
+export default function DrawingLayer({ sheetId, teamId, interactive = true }: DrawingLayerProps) {
   const supabase = createClient();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -252,10 +254,11 @@ export default function DrawingLayer({ sheetId, teamId }: DrawingLayerProps) {
         onPointerCancel={handlePointerUp}
         style={{ touchAction: 'none' }}
         className={`absolute inset-0 select-none [-webkit-touch-callout:none] ${
-          active ? 'cursor-crosshair' : 'pointer-events-none'
+          active && interactive ? 'cursor-crosshair' : 'pointer-events-none'
         }`}
       />
 
+      {interactive && (
       <div
         onClick={(e) => e.stopPropagation()}
         className="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-black/80 rounded-full px-3 py-2 flex-wrap justify-center max-w-[95%]"
@@ -377,6 +380,7 @@ export default function DrawingLayer({ sheetId, teamId }: DrawingLayerProps) {
           </>
         )}
       </div>
+      )}
     </div>
   );
 }

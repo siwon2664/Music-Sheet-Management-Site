@@ -62,6 +62,7 @@ export default async function SetlistDetailPage({ params }: { params: { id: stri
         note: row.note ?? '',
         fileUrl: sheet.file_url,
         songForm: row.song_form ?? [],
+        bpm: sheet.bpm,
       };
       return item;
     })
