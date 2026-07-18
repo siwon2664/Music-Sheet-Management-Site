@@ -12,6 +12,7 @@ export interface MemberRow {
   email: string;
   displayName: string | null;
   role: TeamRole;
+  isCreator: boolean;
 }
 
 interface MembersManagerProps {
@@ -24,28 +25,57 @@ export default function MembersManager({ currentUserId, initialMembers }: Member
   const supabase = createClient();
 
   const [members, setMembers] = useState(initialMembers);
+  const [draftRoles, setDraftRoles] = useState<Record<string, TeamRole>>({});
   const [pendingId, setPendingId] = useState<string | null>(null);
+  const [applying, setApplying] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const leaderCount = useMemo(() => members.filter((m) => m.role === 'LEADER').length, [members]);
 
-  async function handleRoleChange(member: MemberRow, nextRole: TeamRole) {
-    setPendingId(member.id);
+  const pendingChanges = members
+    .map((member) => ({ member, nextRole: draftRoles[member.id] }))
+    .filter(
+      (change): change is { member: MemberRow; nextRole: TeamRole } =>
+        !!change.nextRole && change.nextRole !== change.member.role
+    );
+
+  async function handleApplyAll() {
+    if (pendingChanges.length === 0) return;
+
+    setApplying(true);
     setError(null);
 
-    const { error: updateError } = await supabase
-      .from('team_members')
-      .update({ role: nextRole })
-      .eq('id', member.id);
+    const results = await Promise.all(
+      pendingChanges.map(async ({ member, nextRole }) => {
+        const { error: updateError } = await supabase
+          .from('team_members')
+          .update({ role: nextRole })
+          .eq('id', member.id);
+        return { memberId: member.id, nextRole, updateError };
+      })
+    );
 
-    setPendingId(null);
+    setApplying(false);
 
-    if (updateError) {
-      setError(updateError.message);
-      return;
+    const succeeded = results.filter((r) => !r.updateError);
+    const failed = results.filter((r) => r.updateError);
+
+    setMembers((prev) =>
+      prev.map((m) => {
+        const hit = succeeded.find((s) => s.memberId === m.id);
+        return hit ? { ...m, role: hit.nextRole } : m;
+      })
+    );
+    setDraftRoles((prev) => {
+      const next = { ...prev };
+      succeeded.forEach((s) => delete next[s.memberId]);
+      return next;
+    });
+
+    if (failed.length > 0) {
+      setError(`${failed.length}건 적용에 실패했습니다: ${failed[0].updateError?.message}`);
     }
 
-    setMembers((prev) => prev.map((m) => (m.id === member.id ? { ...m, role: nextRole } : m)));
     router.refresh();
   }
 
@@ -76,26 +106,37 @@ export default function MembersManager({ currentUserId, initialMembers }: Member
         {members.map((member) => {
           const isSelf = member.userId === currentUserId;
           const isLastLeader = member.role === 'LEADER' && leaderCount <= 1;
+          const locked = member.isCreator || isLastLeader;
           const busy = pendingId === member.id;
+          const draftRole = draftRoles[member.id] ?? member.role;
+          const hasPendingChange = draftRole !== member.role;
 
           return (
             <li
               key={member.id}
-              className="bg-white border rounded-lg px-4 py-3 flex items-center justify-between gap-3"
+              className={`bg-white border rounded-lg px-4 py-3 flex items-center justify-between gap-3 ${
+                hasPendingChange ? 'border-black' : ''
+              }`}
             >
               <div className="min-w-0">
                 <p className="font-medium truncate">
                   {member.displayName || member.email}
                   {isSelf && <span className="text-xs text-gray-400 ml-1">(나)</span>}
+                  {hasPendingChange && (
+                    <span className="text-xs text-gray-500 ml-1.5">(변경 예정: {draftRole})</span>
+                  )}
                 </p>
                 <p className="text-xs text-gray-500 truncate">{member.email}</p>
               </div>
 
               <div className="flex items-center gap-2 shrink-0">
                 <select
-                  value={member.role}
-                  onChange={(e) => handleRoleChange(member, e.target.value as TeamRole)}
-                  disabled={busy || isLastLeader}
+                  value={draftRole}
+                  onChange={(e) =>
+                    setDraftRoles((prev) => ({ ...prev, [member.id]: e.target.value as TeamRole }))
+                  }
+                  disabled={applying || busy || locked}
+                  title={member.isCreator ? '이 팀을 만든 사람은 항상 팀장입니다.' : undefined}
                   className="border rounded px-2 py-1 text-xs disabled:opacity-50"
                 >
                   <option value="LEADER">LEADER</option>
@@ -105,10 +146,16 @@ export default function MembersManager({ currentUserId, initialMembers }: Member
                 <button
                   type="button"
                   onClick={() => handleRemove(member)}
-                  disabled={busy || isLastLeader}
+                  disabled={applying || busy || locked}
                   className="text-gray-400 hover:text-red-600 disabled:opacity-30 disabled:cursor-not-allowed"
                   aria-label="팀에서 제거"
-                  title={isLastLeader ? '최소 한 명의 팀장이 필요합니다.' : '팀에서 제거'}
+                  title={
+                    member.isCreator
+                      ? '이 팀을 만든 사람은 제거할 수 없습니다.'
+                      : isLastLeader
+                        ? '최소 한 명의 팀장이 필요합니다.'
+                        : '팀에서 제거'
+                  }
                 >
                   <Trash2 size={16} />
                 </button>
@@ -117,6 +164,15 @@ export default function MembersManager({ currentUserId, initialMembers }: Member
           );
         })}
       </ul>
+
+      <button
+        type="button"
+        onClick={handleApplyAll}
+        disabled={applying || pendingChanges.length === 0}
+        className="self-end text-sm font-medium bg-black text-white rounded px-4 py-2 disabled:opacity-30 disabled:cursor-not-allowed"
+      >
+        {applying ? '적용 중...' : '변경사항 적용'}
+      </button>
     </div>
   );
 }

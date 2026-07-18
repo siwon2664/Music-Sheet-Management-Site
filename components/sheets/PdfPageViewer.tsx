@@ -41,7 +41,10 @@ export default function PdfPageViewer({ src }: PdfPageViewerProps) {
 
         const containerWidth = scroller.clientWidth;
         const containerHeight = scroller.clientHeight;
-        pagesContainer.innerHTML = '';
+
+        // 그리는 동안에도 화면이 비지 않도록, 기존 페이지는 그대로 둔 채
+        // 새 페이지들을 다 그리고 나서 마지막에 한 번에 통째로 교체한다.
+        const newCanvases: HTMLCanvasElement[] = [];
 
         for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
           if (renderIdRef.current !== myRenderId) return;
@@ -74,10 +77,16 @@ export default function PdfPageViewer({ src }: PdfPageViewerProps) {
           }).promise;
 
           if (renderIdRef.current !== myRenderId) return;
-          pagesContainer.appendChild(canvas);
+          newCanvases.push(canvas);
         }
+
+        if (renderIdRef.current !== myRenderId) return;
+        pagesContainer.replaceChildren(...newCanvases);
       } catch {
-        if (renderIdRef.current === myRenderId) setError('PDF를 불러오지 못했습니다.');
+        if (renderIdRef.current === myRenderId) {
+          setError('PDF를 불러오지 못했습니다.');
+          pagesContainer.replaceChildren();
+        }
       } finally {
         if (renderIdRef.current === myRenderId) setLoading(false);
       }
@@ -86,8 +95,16 @@ export default function PdfPageViewer({ src }: PdfPageViewerProps) {
     render();
 
     const scroller = scrollRef.current;
+    // ResizeObserver는 observe() 시작 직후 실제 크기 변화가 없어도 최초 콜백을
+    // 한 번 무조건 발생시킨다. 위에서 이미 render()를 호출했으니 이 최초 콜백은
+    // 무시하지 않으면 곡을 열 때마다 항상 렌더링이 중복돼 화면이 한 번 더 깜빡인다.
+    let isFirstResizeCallback = true;
     const observer = scroller
       ? new ResizeObserver(() => {
+          if (isFirstResizeCallback) {
+            isFirstResizeCallback = false;
+            return;
+          }
           clearTimeout(resizeTimeout);
           resizeTimeout = setTimeout(render, 200);
         })

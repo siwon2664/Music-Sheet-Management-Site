@@ -111,7 +111,7 @@ export default async function DashboardPage({
         role={membership.role}
       />
       <main className="flex-1 p-4 md:p-6 max-w-6xl w-full mx-auto">
-        <FixedSetlists setlists={fixedSetlists ?? []} />
+        <FixedSetlists setlists={fixedSetlists ?? []} teamId={team.id} role={membership.role} />
         <DashboardCalendar
           teamId={team.id}
           role={membership.role}

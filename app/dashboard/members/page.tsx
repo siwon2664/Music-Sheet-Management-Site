@@ -28,7 +28,7 @@ export default async function MembersPage() {
   }
 
   const [{ data: team }, { data: teamMembers }] = await Promise.all([
-    supabase.from('teams').select('invite_token').eq('id', membership.team_id).single(),
+    supabase.from('teams').select('invite_token, created_by').eq('id', membership.team_id).single(),
     supabase
       .from('team_members')
       .select('id, user_id, role, users(email, display_name)')
@@ -44,6 +44,7 @@ export default async function MembersPage() {
       email: profile?.email ?? '',
       displayName: profile?.display_name ?? null,
       role: row.role,
+      isCreator: row.user_id === team?.created_by,
     };
   });
 

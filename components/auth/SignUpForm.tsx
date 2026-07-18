@@ -51,8 +51,8 @@ export default function SignUpForm({ redirectTo = '/dashboard' }: SignUpFormProp
   }
 
   return (
-    <form onSubmit={handleSignUp} className="flex flex-col gap-4 max-w-sm mx-auto">
-      <h1 className="text-xl font-semibold">회원가입</h1>
+    <form onSubmit={handleSignUp} className="flex flex-col gap-4">
+      <h2 className="text-lg font-semibold">회원가입</h2>
 
       <label className="flex flex-col gap-1 text-sm">
         이름

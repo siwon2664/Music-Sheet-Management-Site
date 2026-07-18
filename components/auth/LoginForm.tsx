@@ -40,8 +40,8 @@ export default function LoginForm({ redirectTo = '/dashboard' }: LoginFormProps)
   }
 
   return (
-    <form onSubmit={handleLogin} className="flex flex-col gap-4 max-w-sm mx-auto">
-      <h1 className="text-xl font-semibold">로그인</h1>
+    <form onSubmit={handleLogin} className="flex flex-col gap-4">
+      <h2 className="text-lg font-semibold">로그인</h2>
 
       <label className="flex flex-col gap-1 text-sm">
         이메일
