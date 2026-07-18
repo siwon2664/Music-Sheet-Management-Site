@@ -302,6 +302,7 @@ export default function SetlistEditor({
         <SetlistPanel
           items={items}
           teamId={teamId}
+          role={role}
           onRemove={removeItem}
           onUpdate={updateItem}
           onMove={moveItem}

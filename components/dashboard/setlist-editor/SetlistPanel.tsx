@@ -4,6 +4,7 @@ import { useMemo, useState, type DragEvent } from 'react';
 import { GripVertical, Trash2 } from 'lucide-react';
 import SheetPreviewModal from '@/components/sheets/SheetPreviewModal';
 import SongFormEditor from './SongFormEditor';
+import type { TeamRole } from '@/types/supabase';
 
 const KEY_OPTIONS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
@@ -22,6 +23,7 @@ export interface SetlistItem {
 interface SetlistPanelProps {
   items: SetlistItem[];
   teamId: string;
+  role: TeamRole;
   onRemove: (index: number) => void;
   onUpdate: (index: number, patch: Partial<SetlistItem>) => void;
   onMove: (fromIndex: number, toIndex: number) => void;
@@ -33,6 +35,7 @@ interface SetlistPanelProps {
 export default function SetlistPanel({
   items,
   teamId,
+  role,
   onRemove,
   onUpdate,
   onMove,
@@ -40,6 +43,7 @@ export default function SetlistPanel({
   onUpdateBpm,
   className,
 }: SetlistPanelProps) {
+  const canReorder = role === 'LEADER';
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
 
@@ -65,7 +69,7 @@ export default function SetlistPanel({
 
     if (sheetId) {
       onDropSheet(sheetId, index);
-    } else if (itemIndexStr) {
+    } else if (itemIndexStr && canReorder) {
       onMove(Number(itemIndexStr), index);
     }
   }
@@ -83,8 +87,9 @@ export default function SetlistPanel({
           <div key={item.id}>
             {dragOverIndex === index && <div className="h-1 rounded bg-black/70 mb-1" />}
             <div
-              draggable
+              draggable={canReorder}
               onDragStart={(e) => {
+                if (!canReorder) return;
                 e.dataTransfer.setData('application/item-index', String(index));
                 e.dataTransfer.effectAllowed = 'move';
               }}
@@ -95,10 +100,18 @@ export default function SetlistPanel({
               onDragLeave={() => setDragOverIndex((cur) => (cur === index ? null : cur))}
               onDragEnd={() => setDragOverIndex(null)}
               onDrop={(e) => handleDrop(e, index)}
-              className="border rounded-lg p-3 flex flex-col gap-2 bg-gray-50 cursor-grab active:cursor-grabbing"
+              className={`border rounded-lg p-3 flex flex-col gap-2 bg-gray-50 ${
+                canReorder ? 'cursor-grab active:cursor-grabbing' : ''
+              }`}
             >
               <div className="flex items-start gap-2">
-                <GripVertical size={16} className="text-gray-400 mt-1 shrink-0" />
+                <GripVertical
+                  size={16}
+                  className={`mt-1 shrink-0 ${canReorder ? 'text-gray-400' : 'text-gray-200'}`}
+                  aria-hidden={!canReorder}
+                >
+                  {!canReorder && <title>팀장만 순서를 변경할 수 있습니다.</title>}
+                </GripVertical>
                 <span className="text-sm font-semibold text-gray-400 w-5 shrink-0">{index + 1}</span>
                 {/*
                   드래그 가능한 카드 안에 <button>처럼 네이티브로 포커스 가능한
