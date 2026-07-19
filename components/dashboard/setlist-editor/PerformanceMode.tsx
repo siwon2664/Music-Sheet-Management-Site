@@ -162,51 +162,45 @@ export default function PerformanceMode({ items, teamId, initialIndex = 0, onClo
 
   return (
     <div className="fixed inset-0 z-50 bg-black flex flex-col touch-none">
-      <div className="flex items-center justify-between px-4 py-3 text-white/90">
-        <div className="min-w-0">
+      <div className="flex items-stretch border-b border-white/15 text-white/90">
+        <div className="min-w-0 flex-1 border-r border-white/15 px-4 py-3">
           <p className="font-semibold truncate">{item?.title}</p>
-          <p className="text-xs text-white/50 mt-0.5 flex items-center gap-1.5 flex-wrap">
-            <span>
-              {index + 1} / {items.length}
-              {effectiveKey ? ` · Key ${effectiveKey}` : ''}
-            </span>
-            {item?.bpm && (
-              <span className="text-[10px] font-semibold bg-white/10 text-white rounded-full px-2 py-0.5">
-                {item.bpm} BPM
-              </span>
-            )}
+          <p className="text-xs text-white/50 mt-0.5">
+            {index + 1} / {items.length}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={onClose}
-          className="shrink-0 text-white/70 hover:text-white p-2"
-          aria-label="연주 모드 종료"
-        >
-          <X size={24} />
-        </button>
+        <div className="shrink-0 flex items-center gap-3 px-4 py-3">
+          <div className="text-right">
+            {effectiveKey && <p className="text-sm font-semibold">Key {effectiveKey}</p>}
+            {item?.bpm && <p className="text-xs text-white/50 mt-0.5">{item.bpm} BPM</p>}
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="shrink-0 text-white/70 hover:text-white p-1"
+            aria-label="연주 모드 종료"
+          >
+            <X size={24} />
+          </button>
+        </div>
       </div>
+
+      {item?.songForm && item.songForm.length > 0 && (
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-white/15 px-4 py-2">
+          {item.songForm.map((marker, i) => (
+            <span key={`${marker}-${i}`} className="flex items-center gap-2">
+              {i > 0 && <span className="text-white/30 text-xs">→</span>}
+              <span className="text-xs md:text-sm font-semibold text-white whitespace-nowrap">{marker}</span>
+            </span>
+          ))}
+        </div>
+      )}
 
       <div
         className="relative flex-1 min-h-0 flex items-center justify-center overflow-hidden"
         onPointerDown={handlePointerDown}
         onPointerUp={handlePointerUp}
       >
-        {item?.songForm && item.songForm.length > 0 && (
-          <div className="absolute top-3 inset-x-0 z-20 flex justify-center px-4 pointer-events-none">
-            <div className="max-w-full flex flex-wrap items-center justify-center gap-x-2 gap-y-1 bg-black/70 backdrop-blur-sm rounded-full px-4 py-2">
-              {item.songForm.map((marker, i) => (
-                <span key={`${marker}-${i}`} className="flex items-center gap-2">
-                  {i > 0 && <span className="text-white/30 text-xs">→</span>}
-                  <span className="text-xs md:text-sm font-semibold text-white whitespace-nowrap">
-                    {marker}
-                  </span>
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
-
         <div className="w-full h-full flex items-center justify-center">
           {loading && <p className="text-sm text-white/50">불러오는 중...</p>}
           {!loading && error && <p className="text-sm text-red-400 px-6 text-center">{error}</p>}

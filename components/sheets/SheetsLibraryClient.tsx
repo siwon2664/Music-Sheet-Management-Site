@@ -7,6 +7,7 @@ import {
   ArrowUp,
   ArrowUpDown,
   CalendarPlus,
+  Download,
   Pencil,
   Plus,
   Search,
@@ -18,6 +19,7 @@ import { matchesSearch } from '@/lib/hangul';
 import { isPdfFile, stripFileExtension } from '@/lib/storage';
 import { uploadSheetFile } from '@/lib/sheetUpload';
 import { getCachedSignedUrl, setCachedSignedUrl } from '@/lib/signedUrlCache';
+import { exportSheetsAsMergedPdf, exportSheetsAsSeparatePdfs, type ExportSheetSource } from '@/lib/exportSheets';
 import type { TeamRole } from '@/types/supabase';
 import UploadSheetModal from './UploadSheetModal';
 import EditSheetModal from './EditSheetModal';
@@ -65,6 +67,11 @@ export default function SheetsLibraryClient({ teamId, role, initialSheets }: She
   const [error, setError] = useState<string | null>(null);
   const [thumbnailUrls, setThumbnailUrls] = useState<Record<string, string>>({});
   const dragCounter = useRef(0);
+
+  const [showDownloadModal, setShowDownloadModal] = useState(false);
+  const [downloadMode, setDownloadMode] = useState<'single' | 'separate' | null>(null);
+  const [downloading, setDownloading] = useState<{ done: number; total: number } | null>(null);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
 
   const canDelete = role === 'LEADER';
 
@@ -188,6 +195,90 @@ export default function SheetsLibraryClient({ teamId, role, initialSheets }: She
     setSheets((prev) => prev.filter((sheet) => !selectedIds.has(sheet.id)));
     setSelectedIds(new Set());
     router.refresh();
+  }
+
+  function sanitizeFilename(name: string): string {
+    return name.replace(/[\\/:*?"<>|]/g, '_').trim() || '악보';
+  }
+
+  function triggerDownload(blob: Blob, filename: string) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function openDownloadModal() {
+    setDownloadError(null);
+    setDownloadMode(selectedSheets.length > 1 ? null : 'single');
+    setShowDownloadModal(true);
+  }
+
+  function closeDownloadModal() {
+    setShowDownloadModal(false);
+    setDownloadMode(null);
+    setDownloadError(null);
+  }
+
+  async function handleDownload(includeMarkup: boolean) {
+    const sources: ExportSheetSource[] = selectedSheets
+      .filter((sheet): sheet is typeof sheet & { file_url: string } => !!sheet.file_url)
+      .map((sheet) => ({ id: sheet.id, title: sheet.title, fileUrl: sheet.file_url }));
+
+    if (sources.length === 0) {
+      setDownloadError('다운로드할 악보 파일이 없습니다.');
+      return;
+    }
+
+    setDownloadError(null);
+    setDownloading({ done: 0, total: sources.length });
+
+    try {
+      if (downloadMode === 'separate' && sources.length > 1) {
+        const { files, skipped } = await exportSheetsAsSeparatePdfs(
+          supabase,
+          sources,
+          { includeMarkup },
+          (done, total) => setDownloading({ done, total })
+        );
+
+        for (let i = 0; i < files.length; i++) {
+          triggerDownload(files[i].blob, `${sanitizeFilename(files[i].title)}.pdf`);
+          // 브라우저가 여러 다운로드를 한꺼번에 요청받으면 막는 경우가 있어 살짝 간격을 둔다.
+          if (i < files.length - 1) await new Promise((resolve) => setTimeout(resolve, 300));
+        }
+
+        if (skipped.length > 0) {
+          setDownloadError(`다음 악보는 포함하지 못했습니다: ${skipped.join(', ')}`);
+        } else {
+          closeDownloadModal();
+        }
+      } else {
+        const { blob, skipped } = await exportSheetsAsMergedPdf(
+          supabase,
+          sources,
+          { includeMarkup },
+          (done, total) => setDownloading({ done, total })
+        );
+
+        const filename = sources.length === 1 ? sanitizeFilename(sources[0].title) : `악보 ${sources.length}곡`;
+        triggerDownload(blob, `${filename}.pdf`);
+
+        if (skipped.length > 0) {
+          setDownloadError(`다음 악보는 포함하지 못했습니다: ${skipped.join(', ')}`);
+        } else {
+          closeDownloadModal();
+        }
+      }
+    } catch (err) {
+      setDownloadError(err instanceof Error ? err.message : '다운로드에 실패했습니다.');
+    } finally {
+      setDownloading(null);
+    }
   }
 
   async function handleBulkUpload(files: File[]) {
@@ -348,6 +439,14 @@ export default function SheetsLibraryClient({ teamId, role, initialSheets }: She
             >
               <CalendarPlus size={14} />이 곡들로 콘티 만들기
             </button>
+            <button
+              type="button"
+              onClick={openDownloadModal}
+              className="flex items-center gap-1.5 text-sm font-medium border rounded px-3 py-1.5 hover:bg-white"
+            >
+              <Download size={14} />
+              다운로드
+            </button>
             {canDelete && (
               <button
                 type="button"
@@ -493,6 +592,81 @@ export default function SheetsLibraryClient({ teamId, role, initialSheets }: She
           teamId={teamId}
           onClose={() => setPreviewIndex(null)}
         />
+      )}
+
+      {showDownloadModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-lg shadow-lg w-full max-w-sm p-6">
+            {downloadMode === null ? (
+              <>
+                <h2 className="text-lg font-semibold mb-2">다운로드 방식 선택</h2>
+                <p className="text-sm text-gray-500 mb-4">
+                  선택한 악보 {selectedSheets.length}개를 어떻게 받을까요?
+                </p>
+                <div className="flex flex-col gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setDownloadMode('single')}
+                    className="bg-black text-white rounded px-4 py-2 text-sm font-medium"
+                  >
+                    하나의 파일로 합쳐서 받기
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDownloadMode('separate')}
+                    className="border rounded px-4 py-2 text-sm font-medium hover:bg-gray-50"
+                  >
+                    개별 파일로 각각 받기
+                  </button>
+                  <button
+                    type="button"
+                    onClick={closeDownloadModal}
+                    className="text-sm text-gray-500 hover:text-gray-900 mt-1"
+                  >
+                    취소
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <h2 className="text-lg font-semibold mb-2">필기 포함 여부</h2>
+                <p className="text-sm text-gray-500 mb-4">
+                  내가 그려둔 필기(마킹)를 악보에 포함해서 받을까요? 여백은 화면에 보이는 것처럼 잘라낸
+                  크기로 저장됩니다.
+                </p>
+
+                {downloadError && <p className="text-sm text-red-600 mb-4">{downloadError}</p>}
+
+                <div className="flex flex-col gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleDownload(true)}
+                    disabled={!!downloading}
+                    className="bg-black text-white rounded px-4 py-2 text-sm font-medium disabled:opacity-50"
+                  >
+                    {downloading ? `만드는 중... (${downloading.done}/${downloading.total})` : '필기 포함해서 다운로드'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDownload(false)}
+                    disabled={!!downloading}
+                    className="border rounded px-4 py-2 text-sm font-medium hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    {downloading ? '만드는 중...' : '악보만 다운로드'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => (selectedSheets.length > 1 ? setDownloadMode(null) : closeDownloadModal())}
+                    disabled={!!downloading}
+                    className="text-sm text-gray-500 hover:text-gray-900 mt-1 disabled:opacity-50"
+                  >
+                    {selectedSheets.length > 1 ? '이전' : '취소'}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );

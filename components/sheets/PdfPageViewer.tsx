@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { detectPdfPageContentBox } from '@/lib/pdfContentBox';
 
 interface PdfPageViewerProps {
   src: string;
@@ -52,31 +53,44 @@ export default function PdfPageViewer({ src }: PdfPageViewerProps) {
           if (renderIdRef.current !== myRenderId) return;
 
           const unscaledViewport = page.getViewport({ scale: 1 });
-          const scale = Math.min(
-            containerWidth / unscaledViewport.width,
-            containerHeight / unscaledViewport.height
-          );
-          const viewport = page.getViewport({ scale });
+
+          // 1) 저해상도로 한 번 그려서 여백을 제외한 실제 악보 내용의 경계 상자를 감지한다.
+          const box = await detectPdfPageContentBox(page, unscaledViewport);
+          if (renderIdRef.current !== myRenderId) return;
+
+          // 2) 내용 영역(포인트 단위) 기준으로 컨테이너를 최대한 채우는 배율을 계산한다.
+          const contentWidth = unscaledViewport.width * (box.right - box.left);
+          const contentHeight = unscaledViewport.height * (box.bottom - box.top);
+          const scale = Math.min(containerWidth / contentWidth, containerHeight / contentHeight);
 
           const outputScale = window.devicePixelRatio || 1;
+          const fullViewport = page.getViewport({ scale: scale * outputScale });
+          const fullCanvas = document.createElement('canvas');
+          fullCanvas.width = Math.max(1, Math.ceil(fullViewport.width));
+          fullCanvas.height = Math.max(1, Math.ceil(fullViewport.height));
+          const fullCtx = fullCanvas.getContext('2d');
+          if (!fullCtx) continue;
+          await page.render({ canvasContext: fullCtx, viewport: fullViewport }).promise;
+          if (renderIdRef.current !== myRenderId) return;
+
+          // 3) 여백을 제외한 내용 영역만 잘라 실제로 보여줄 캔버스에 옮긴다.
+          const sx = box.left * fullCanvas.width;
+          const sy = box.top * fullCanvas.height;
+          const sw = (box.right - box.left) * fullCanvas.width;
+          const sh = (box.bottom - box.top) * fullCanvas.height;
+
           const canvas = document.createElement('canvas');
-          canvas.width = Math.floor(viewport.width * outputScale);
-          canvas.height = Math.floor(viewport.height * outputScale);
-          canvas.style.width = `${viewport.width}px`;
-          canvas.style.height = `${viewport.height}px`;
+          canvas.width = Math.max(1, Math.round(sw));
+          canvas.height = Math.max(1, Math.round(sh));
+          canvas.style.width = `${canvas.width / outputScale}px`;
+          canvas.style.height = `${canvas.height / outputScale}px`;
           canvas.style.display = 'block';
           if (pageNumber < pdf.numPages) canvas.style.marginBottom = '8px';
 
           const ctx = canvas.getContext('2d');
           if (!ctx) continue;
+          ctx.drawImage(fullCanvas, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
 
-          await page.render({
-            canvasContext: ctx,
-            viewport,
-            transform: outputScale !== 1 ? [outputScale, 0, 0, outputScale, 0, 0] : undefined,
-          }).promise;
-
-          if (renderIdRef.current !== myRenderId) return;
           newCanvases.push(canvas);
         }
 
