@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
-import { ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { X } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { isPdfFile } from '@/lib/storage';
 import PdfPageViewer from '@/components/sheets/PdfPageViewer';
@@ -192,26 +192,6 @@ export default function PerformanceMode({ items, teamId, initialIndex = 0, onClo
         onPointerDown={handlePointerDown}
         onPointerUp={handlePointerUp}
       >
-        <button
-          type="button"
-          onClick={goPrev}
-          disabled={index === 0}
-          className="absolute left-0 top-0 h-full w-20 md:w-28 z-10 flex items-center justify-start pl-2 text-white/70 hover:text-white active:text-white disabled:opacity-20 disabled:cursor-not-allowed"
-          aria-label="이전 곡"
-        >
-          <ChevronLeft size={48} />
-        </button>
-
-        <button
-          type="button"
-          onClick={goNext}
-          disabled={index === items.length - 1}
-          className="absolute right-0 top-0 h-full w-20 md:w-28 z-10 flex items-center justify-end pr-2 text-white/70 hover:text-white active:text-white disabled:opacity-20 disabled:cursor-not-allowed"
-          aria-label="다음 곡"
-        >
-          <ChevronRight size={48} />
-        </button>
-
         {item?.songForm && item.songForm.length > 0 && (
           <div className="absolute top-3 inset-x-0 z-20 flex justify-center px-4 pointer-events-none">
             <div className="max-w-full flex flex-wrap items-center justify-center gap-x-2 gap-y-1 bg-black/70 backdrop-blur-sm rounded-full px-4 py-2">
@@ -227,7 +207,7 @@ export default function PerformanceMode({ items, teamId, initialIndex = 0, onClo
           </div>
         )}
 
-        <div className="w-full h-full flex items-center justify-center px-20 md:px-28">
+        <div className="w-full h-full flex items-center justify-center">
           {loading && <p className="text-sm text-white/50">불러오는 중...</p>}
           {!loading && error && <p className="text-sm text-red-400 px-6 text-center">{error}</p>}
           {!loading &&
