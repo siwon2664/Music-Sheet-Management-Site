@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { resolveActiveTeam } from '@/lib/activeTeam';
 import SheetsLibraryClient from '@/components/sheets/SheetsLibraryClient';
 
 export default async function SheetsLibraryPage() {
@@ -14,22 +15,16 @@ export default async function SheetsLibraryPage() {
     redirect('/login');
   }
 
-  const { data: membership } = await supabase
-    .from('team_members')
-    .select('team_id, role')
-    .eq('user_id', user.id)
-    .order('joined_at', { ascending: true })
-    .limit(1)
-    .maybeSingle();
+  const { activeTeam } = await resolveActiveTeam(supabase, user.id);
 
-  if (!membership) {
+  if (!activeTeam) {
     redirect('/dashboard');
   }
 
   const { data: sheets } = await supabase
     .from('sheets')
     .select('id, title, composer, key, bpm, tags, file_url, thumbnail_url, created_at')
-    .eq('team_id', membership.team_id)
+    .eq('team_id', activeTeam.id)
     .order('title', { ascending: true });
 
   return (
@@ -47,8 +42,8 @@ export default async function SheetsLibraryPage() {
         </header>
 
         <SheetsLibraryClient
-          teamId={membership.team_id}
-          role={membership.role}
+          teamId={activeTeam.id}
+          role={activeTeam.role}
           initialSheets={sheets ?? []}
         />
       </div>

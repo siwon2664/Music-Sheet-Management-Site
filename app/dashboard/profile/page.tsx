@@ -3,6 +3,8 @@ import { User } from 'lucide-react';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import UpdateDisplayNameForm from '@/components/dashboard/profile/UpdateDisplayNameForm';
+import ChangePasswordForm from '@/components/dashboard/profile/ChangePasswordForm';
+import DeleteAccountSection from '@/components/dashboard/profile/DeleteAccountSection';
 
 export default async function ProfilePage() {
   const supabase = await createClient();
@@ -11,7 +13,7 @@ export default async function ProfilePage() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user) {
+  if (!user || !user.email) {
     redirect('/login');
   }
 
@@ -58,6 +60,12 @@ export default async function ProfilePage() {
 
           <UpdateDisplayNameForm userId={user.id} initialDisplayName={profile?.display_name ?? null} />
         </div>
+
+        <div className="bg-white border rounded-lg p-6">
+          <ChangePasswordForm email={user.email} />
+        </div>
+
+        <DeleteAccountSection email={user.email} />
       </div>
     </main>
   );

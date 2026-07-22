@@ -1,26 +1,35 @@
 import Link from 'next/link';
 import { Library, ListMusic } from 'lucide-react';
 import ProfileMenu from '@/components/dashboard/ProfileMenu';
+import TeamSwitcher from '@/components/dashboard/TeamSwitcher';
+import type { UserTeam } from '@/lib/activeTeam';
 import type { TeamRole } from '@/types/supabase';
 
 interface TopNavProps {
   teamName: string;
+  teams: UserTeam[];
+  activeTeamId: string;
   email: string;
   displayName: string | null;
   avatarUrl: string | null;
   role: TeamRole;
 }
 
-export default function TopNav({ teamName, email, displayName, avatarUrl, role }: TopNavProps) {
+export default function TopNav({
+  teamName,
+  teams,
+  activeTeamId,
+  email,
+  displayName,
+  avatarUrl,
+  role,
+}: TopNavProps) {
   return (
     <header className="border-b bg-white">
       <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between gap-4">
         <div className="flex items-center gap-2 min-w-0">
           <ListMusic size={22} className="text-gray-800 shrink-0" />
-          <div className="min-w-0 leading-tight">
-            <h1 className="text-lg md:text-xl font-bold truncate">Band Setlist</h1>
-            <p className="text-xs text-gray-400 truncate">{teamName}</p>
-          </div>
+          <TeamSwitcher teamName={teamName} teams={teams} activeTeamId={activeTeamId} />
         </div>
         <div className="flex items-center gap-3 shrink-0">
           <Link

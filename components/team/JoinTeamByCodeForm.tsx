@@ -26,15 +26,23 @@ export default function JoinTeamByCodeForm() {
     setError(null);
 
     const token = extractInviteToken(code);
-    const { error: joinError } = await supabase.rpc('join_team_via_invite', { p_token: token });
-
-    setLoading(false);
+    const { data: teamId, error: joinError } = await supabase.rpc('join_team_via_invite', {
+      p_token: token,
+    });
 
     if (joinError) {
+      setLoading(false);
       setError(joinError.message || '유효하지 않은 코드입니다. 코드를 다시 확인해주세요.');
       return;
     }
 
+    await fetch('/api/teams/active', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ teamId }),
+    });
+
+    setLoading(false);
     router.push('/dashboard');
     router.refresh();
   }

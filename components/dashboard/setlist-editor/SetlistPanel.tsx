@@ -18,6 +18,8 @@ export interface SetlistItem {
   fileUrl: string | null;
   songForm: string[];
   bpm: number | null;
+  // 악보 파일의 sheets.updated_at — 오프라인 캐시 버전 구분에 쓰인다.
+  updatedAt: string;
 }
 
 interface SetlistPanelProps {

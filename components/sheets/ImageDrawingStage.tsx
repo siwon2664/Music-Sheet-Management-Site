@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import DrawingLayer from './DrawingLayer';
 import { detectContentBoxForImageUrl, FULL_CONTENT_BOX, type ContentBoxFraction } from '@/lib/contentBox';
+import { getCachedSheetFile } from '@/lib/offlineSheetCache';
 
 interface StageRect {
   left: number;
@@ -17,6 +18,8 @@ interface ImageDrawingStageProps {
   sheetId: string;
   teamId: string;
   interactive?: boolean;
+  // 오프라인 캐시 폴백에 쓰인다 — 있어야 캐시를 조회할 수 있다.
+  updatedAt?: string;
 }
 
 // 이미지도 PdfPageViewer와 같은 방식으로: 컨테이너를 꽉 채우되, 파일마다
@@ -29,6 +32,7 @@ export default function ImageDrawingStage({
   sheetId,
   teamId,
   interactive = true,
+  updatedAt,
 }: ImageDrawingStageProps) {
   const outerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -36,7 +40,7 @@ export default function ImageDrawingStage({
   const boxRef = useRef<ContentBoxFraction>(FULL_CONTENT_BOX);
   const [stageRect, setStageRect] = useState<StageRect | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   function render() {
     const outer = outerRef.current;
@@ -88,37 +92,75 @@ export default function ImageDrawingStage({
   // 실제 표시용 이미지는 CORS 설정 없이 그대로 불러온다(항상 로드/표시가
   // 보장되도록). 여백 감지는 별도의 익명 CORS 이미지로 시도하고, 지원되지
   // 않는 환경이면 조용히 원본 그대로(여백 트리밍 없이) 표시한다.
+  //
+  // 네트워크 우선, 실패 시(또는 처음부터 오프라인이면) 이 곡을 이전에
+  // 열어봤을 때 저장해둔 캐시 Blob으로 폴백한다.
   useEffect(() => {
     let cancelled = false;
+    let objectUrl: string | null = null;
     setLoading(true);
-    setError(false);
+    setError(null);
     boxRef.current = FULL_CONTENT_BOX;
 
-    const img = new Image();
-    img.onload = () => {
-      if (cancelled) return;
-      imgRef.current = img;
-      setLoading(false);
-      render();
-    };
-    img.onerror = () => {
-      if (cancelled) return;
-      setLoading(false);
-      setError(true);
-    };
-    img.src = src;
+    function loadFrom(url: string, onFail: () => void) {
+      const img = new Image();
+      img.onload = () => {
+        if (cancelled) return;
+        imgRef.current = img;
+        setLoading(false);
+        render();
+      };
+      img.onerror = () => {
+        if (cancelled) return;
+        onFail();
+      };
+      img.src = url;
 
-    detectContentBoxForImageUrl(src).then((box) => {
+      detectContentBoxForImageUrl(url).then((box) => {
+        if (cancelled) return;
+        boxRef.current = box;
+        render();
+      });
+    }
+
+    function fail() {
       if (cancelled) return;
-      boxRef.current = box;
-      render();
-    });
+      setLoading(false);
+      setError(!navigator.onLine ? '오프라인 상태라 이 곡은 불러올 수 없습니다.' : '이미지를 불러오지 못했습니다.');
+    }
+
+    async function loadFromCache() {
+      if (!sheetId || !updatedAt) {
+        fail();
+        return;
+      }
+
+      const blob = await getCachedSheetFile(sheetId, updatedAt);
+      if (cancelled) return;
+
+      if (!blob) {
+        fail();
+        return;
+      }
+
+      objectUrl = URL.createObjectURL(blob);
+      loadFrom(objectUrl, fail);
+    }
+
+    if (src && navigator.onLine) {
+      loadFrom(src, () => {
+        void loadFromCache();
+      });
+    } else {
+      void loadFromCache();
+    }
 
     return () => {
       cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [src]);
+  }, [src, sheetId, updatedAt]);
 
   useEffect(() => {
     const outer = outerRef.current;
@@ -135,7 +177,7 @@ export default function ImageDrawingStage({
       className="relative w-full h-full flex items-center justify-center select-none [-webkit-touch-callout:none]"
     >
       {loading && <p className="text-sm text-white/50">불러오는 중...</p>}
-      {!loading && error && <p className="text-sm text-red-400 px-6 text-center">이미지를 불러오지 못했습니다.</p>}
+      {!loading && error && <p className="text-sm text-red-400 px-6 text-center">{error}</p>}
       <canvas
         ref={canvasRef}
         role="img"

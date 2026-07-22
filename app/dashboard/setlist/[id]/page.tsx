@@ -36,7 +36,7 @@ export default async function SetlistDetailPage({ params }: { params: { id: stri
   const [{ data: sheets }, { data: setlistSheets }] = await Promise.all([
     supabase
       .from('sheets')
-      .select('id, title, composer, key, bpm, tags, file_url')
+      .select('id, title, composer, key, bpm, tags, file_url, updated_at')
       .eq('team_id', setlist.team_id)
       .order('title', { ascending: true }),
     supabase
@@ -63,6 +63,7 @@ export default async function SetlistDetailPage({ params }: { params: { id: stri
         fileUrl: sheet.file_url,
         songForm: row.song_form ?? [],
         bpm: sheet.bpm,
+        updatedAt: sheet.updated_at,
       };
       return item;
     })

@@ -2,16 +2,20 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { detectPdfPageContentBox } from '@/lib/pdfContentBox';
+import { getCachedSheetFile } from '@/lib/offlineSheetCache';
 
 interface PdfPageViewerProps {
   src: string;
+  // 오프라인 캐시 폴백에 쓰인다 — 둘 다 있어야 캐시를 조회할 수 있다.
+  sheetId?: string;
+  updatedAt?: string;
 }
 
 // 브라우저 내장 PDF 뷰어(iframe)는 파일마다 원본 페이지 크기에 따라 배율이 제각각이라
 // 악보마다 화면에 보이는 크기가 들쭉날쭉했다. pdf.js로 직접 캔버스에 그려서
 // 이미지 악보(object-contain)와 동일하게, 페이지 전체가 잘리지 않고 컨테이너
 // 안에 다 들어오도록(가로/세로 둘 다 맞춰서) 렌더링한다.
-export default function PdfPageViewer({ src }: PdfPageViewerProps) {
+export default function PdfPageViewer({ src, sheetId, updatedAt }: PdfPageViewerProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const pagesRef = useRef<HTMLDivElement>(null);
   const renderIdRef = useRef(0);
@@ -37,7 +41,33 @@ export default function PdfPageViewer({ src }: PdfPageViewerProps) {
         const pdfjsLib = await import('pdfjs-dist');
         pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
 
-        const pdf = await pdfjsLib.getDocument(src).promise;
+        // 네트워크 우선: 온라인이고 src가 있으면 먼저 시도하고, 실패하거나
+        // 오프라인이면 이 곡을 이전에 열어봤을 때 저장해둔 캐시로 폴백한다.
+        let pdf: Awaited<ReturnType<(typeof pdfjsLib)['getDocument']>['promise']> | null = null;
+
+        if (src && navigator.onLine) {
+          try {
+            pdf = await pdfjsLib.getDocument(src).promise;
+          } catch {
+            pdf = null;
+          }
+        }
+
+        if (renderIdRef.current !== myRenderId) return;
+
+        if (!pdf && sheetId && updatedAt) {
+          const cachedBlob = await getCachedSheetFile(sheetId, updatedAt);
+          if (renderIdRef.current !== myRenderId) return;
+          if (cachedBlob) {
+            const arrayBuffer = await cachedBlob.arrayBuffer();
+            if (renderIdRef.current !== myRenderId) return;
+            pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+          }
+        }
+
+        if (!pdf) {
+          throw new Error(!navigator.onLine ? 'offline' : 'load-failed');
+        }
         if (renderIdRef.current !== myRenderId) return;
 
         const containerWidth = scroller.clientWidth;
@@ -96,9 +126,13 @@ export default function PdfPageViewer({ src }: PdfPageViewerProps) {
 
         if (renderIdRef.current !== myRenderId) return;
         pagesContainer.replaceChildren(...newCanvases);
-      } catch {
+      } catch (err) {
         if (renderIdRef.current === myRenderId) {
-          setError('PDF를 불러오지 못했습니다.');
+          setError(
+            err instanceof Error && err.message === 'offline'
+              ? '오프라인 상태라 이 곡은 불러올 수 없습니다.'
+              : 'PDF를 불러오지 못했습니다.'
+          );
           pagesContainer.replaceChildren();
         }
       } finally {
@@ -130,7 +164,7 @@ export default function PdfPageViewer({ src }: PdfPageViewerProps) {
       clearTimeout(resizeTimeout);
       observer?.disconnect();
     };
-  }, [src]);
+  }, [src, sheetId, updatedAt]);
 
   return (
     <div

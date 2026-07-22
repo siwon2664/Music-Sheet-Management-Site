@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { LogOut, Settings, User, Users } from 'lucide-react';
+import { Building2, LogOut, Settings, User, Users } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import type { TeamRole } from '@/types/supabase';
 
@@ -81,6 +81,14 @@ export default function ProfileMenu({ email, displayName, avatarUrl, role }: Pro
           >
             <Settings size={14} />
             설정
+          </Link>
+
+          <Link
+            href="/dashboard/teams/manage"
+            onClick={() => setOpen(false)}
+            className="flex items-center gap-2 px-4 py-2 text-sm hover:bg-gray-50"
+          >
+            <Building2 size={14} />팀 관리
           </Link>
 
           {role === 'LEADER' && (

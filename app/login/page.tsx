@@ -5,7 +5,7 @@ import AuthBrandHeader from '@/components/auth/AuthBrandHeader';
 export default function LoginPage({
   searchParams,
 }: {
-  searchParams: { redirect?: string; confirmed?: string };
+  searchParams: { redirect?: string; confirmed?: string; deleted?: string };
 }) {
   const redirectTo = searchParams.redirect || '/dashboard';
 
@@ -16,6 +16,9 @@ export default function LoginPage({
       <div className="w-full max-w-sm bg-white border rounded-lg shadow-sm p-6">
         {searchParams.confirmed && (
           <p className="text-sm text-green-600 mb-4">회원가입이 완료되었습니다. 로그인해주세요.</p>
+        )}
+        {searchParams.deleted && (
+          <p className="text-sm text-green-600 mb-4">탈퇴가 완료되었습니다. 그동안 이용해주셔서 감사합니다.</p>
         )}
         <LoginForm redirectTo={redirectTo} />
       </div>

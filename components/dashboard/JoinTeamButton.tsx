@@ -18,15 +18,23 @@ export default function JoinTeamButton({ token }: JoinTeamButtonProps) {
     setLoading(true);
     setError(null);
 
-    const { error: joinError } = await supabase.rpc('join_team_via_invite', { p_token: token });
-
-    setLoading(false);
+    const { data: teamId, error: joinError } = await supabase.rpc('join_team_via_invite', {
+      p_token: token,
+    });
 
     if (joinError) {
+      setLoading(false);
       setError(joinError.message);
       return;
     }
 
+    await fetch('/api/teams/active', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ teamId }),
+    });
+
+    setLoading(false);
     router.push('/dashboard');
     router.refresh();
   }

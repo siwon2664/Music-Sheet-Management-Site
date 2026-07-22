@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
-import { Eraser, Highlighter, Pencil, Trash2, Undo2 } from 'lucide-react';
+import { Eraser, Highlighter, Pencil, Trash2, Undo2, WifiOff } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import { getCachedDrawing } from '@/lib/offlineSheetCache';
 import type { Json } from '@/types/supabase';
 
 interface Stroke {
@@ -44,6 +45,7 @@ export default function DrawingLayer({ sheetId, teamId, interactive = true }: Dr
   const [penWidth, setPenWidth] = useState(WIDTHS[1]);
   const [strokeCount, setStrokeCount] = useState(0);
   const [saving, setSaving] = useState(false);
+  const [offlineSaveFailed, setOfflineSaveFailed] = useState(false);
 
   function redraw() {
     const canvas = canvasRef.current;
@@ -101,19 +103,32 @@ export default function DrawingLayer({ sheetId, teamId, interactive = true }: Dr
       } = await supabase.auth.getUser();
       if (!user || cancelled) return;
 
-      const { data } = await supabase
-        .from('drawings')
-        .select('id, coordinates')
-        .eq('sheet_id', sheetId)
-        .eq('user_id', user.id)
-        .eq('page_number', 1)
-        .maybeSingle();
+      // 오프라인이면 조회 자체를 건너뛰고 바로 캐시를 쓴다. 온라인이면 최신
+      // 데이터를 우선 시도하고, 그 요청이 실패했을 때만 캐시로 폴백한다.
+      if (navigator.onLine) {
+        const { data, error } = await supabase
+          .from('drawings')
+          .select('id, coordinates')
+          .eq('sheet_id', sheetId)
+          .eq('user_id', user.id)
+          .eq('page_number', 1)
+          .maybeSingle();
 
+        if (cancelled) return;
+
+        if (!error) {
+          rowIdRef.current = data?.id ?? null;
+          const parsed = data?.coordinates as unknown as { strokes?: Stroke[] } | null;
+          strokesRef.current = parsed?.strokes ?? [];
+          setStrokeCount(strokesRef.current.length);
+          redraw();
+          return;
+        }
+      }
+
+      const cached = await getCachedDrawing(sheetId, user.id);
       if (cancelled) return;
-
-      rowIdRef.current = data?.id ?? null;
-      const parsed = data?.coordinates as unknown as { strokes?: Stroke[] } | null;
-      strokesRef.current = parsed?.strokes ?? [];
+      strokesRef.current = (cached as Stroke[] | null) ?? [];
       setStrokeCount(strokesRef.current.length);
       redraw();
     }
@@ -207,12 +222,23 @@ export default function DrawingLayer({ sheetId, teamId, interactive = true }: Dr
       return;
     }
 
+    // 오프라인이면 저장 요청은 어차피 실패할 수밖에 없으니, 네트워크 요청
+    // 자체를 시도하지 않고 바로 "저장 안 됨" 상태로 안내한다. 이 상태의
+    // 필기를 로컬에 큐잉했다가 재연결 시 동기화하는 것은 이번 범위에서 제외.
+    if (!navigator.onLine) {
+      setOfflineSaveFailed(true);
+      setSaving(false);
+      return;
+    }
+
     const payload = { strokes: nextStrokes } as unknown as Json;
+    let saveError = false;
 
     if (rowIdRef.current) {
-      await supabase.from('drawings').update({ coordinates: payload }).eq('id', rowIdRef.current);
+      const { error } = await supabase.from('drawings').update({ coordinates: payload }).eq('id', rowIdRef.current);
+      saveError = !!error;
     } else {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('drawings')
         .insert({
           sheet_id: sheetId,
@@ -224,8 +250,10 @@ export default function DrawingLayer({ sheetId, teamId, interactive = true }: Dr
         .select('id')
         .single();
       if (data) rowIdRef.current = data.id;
+      saveError = !!error;
     }
 
+    setOfflineSaveFailed(saveError);
     setSaving(false);
   }
 
@@ -377,6 +405,12 @@ export default function DrawingLayer({ sheetId, teamId, interactive = true }: Dr
             </button>
 
             {saving && <span className="text-[10px] text-white/50 shrink-0">저장 중...</span>}
+            {!saving && offlineSaveFailed && (
+              <span className="flex items-center gap-1 text-[10px] text-amber-400 shrink-0">
+                <WifiOff size={12} />
+                오프라인이라 저장 안 됨
+              </span>
+            )}
           </>
         )}
       </div>

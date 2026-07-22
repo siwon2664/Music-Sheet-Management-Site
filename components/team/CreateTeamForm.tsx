@@ -24,14 +24,22 @@ export default function CreateTeamForm() {
       p_description: description || undefined,
     });
 
-    setLoading(false);
-
     if (rpcError) {
+      setLoading(false);
       setError(rpcError.message);
       return;
     }
 
-    router.push('/dashboard/teams/' + team.id);
+    // 새로 만든 팀을 바로 활성 팀으로 지정해서, 대시보드로 돌아갔을 때
+    // 방금 만든 팀이 아니라 이전에 쓰던 팀이 보이는 일이 없게 한다.
+    await fetch('/api/teams/active', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ teamId: team.id }),
+    });
+
+    setLoading(false);
+    router.push('/dashboard');
     router.refresh();
   }
 

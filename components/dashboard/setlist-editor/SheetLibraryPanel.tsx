@@ -13,6 +13,7 @@ export interface LibrarySheet {
   bpm: number | null;
   tags: string[];
   file_url: string | null;
+  updated_at: string;
 }
 
 interface SheetLibraryPanelProps {

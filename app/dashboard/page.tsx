@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { resolveActiveTeam } from '@/lib/activeTeam';
 import CreateTeamForm from '@/components/team/CreateTeamForm';
 import JoinTeamByCodeForm from '@/components/team/JoinTeamByCodeForm';
 import TopNav from '@/components/dashboard/TopNav';
@@ -30,16 +31,9 @@ export default async function DashboardPage({
     redirect('/login');
   }
 
-  // 단일 팀 구조: 유저가 속한 첫 번째 팀을 사용한다.
-  const { data: membership } = await supabase
-    .from('team_members')
-    .select('team_id, role')
-    .eq('user_id', user.id)
-    .order('joined_at', { ascending: true })
-    .limit(1)
-    .maybeSingle();
+  const { activeTeam, teams } = await resolveActiveTeam(supabase, user.id);
 
-  if (!membership) {
+  if (!activeTeam) {
     return (
       <main className="min-h-screen p-8 max-w-md mx-auto flex flex-col gap-8">
         <header>
@@ -59,15 +53,7 @@ export default async function DashboardPage({
     );
   }
 
-  const { data: team } = await supabase
-    .from('teams')
-    .select('id, name')
-    .eq('id', membership.team_id)
-    .single();
-
-  if (!team) {
-    redirect('/login');
-  }
+  const team = activeTeam;
 
   const { data: profile } = await supabase
     .from('users')
@@ -105,16 +91,18 @@ export default async function DashboardPage({
     <div className="min-h-screen bg-gray-50 flex flex-col">
       <TopNav
         teamName={team.name}
+        teams={teams}
+        activeTeamId={team.id}
         email={user.email ?? ''}
         displayName={profile?.display_name ?? null}
         avatarUrl={profile?.avatar_url ?? null}
-        role={membership.role}
+        role={team.role}
       />
       <main className="flex-1 p-4 md:p-6 max-w-6xl w-full mx-auto">
-        <FixedSetlists setlists={fixedSetlists ?? []} teamId={team.id} role={membership.role} />
+        <FixedSetlists setlists={fixedSetlists ?? []} teamId={team.id} role={team.role} />
         <DashboardCalendar
           teamId={team.id}
-          role={membership.role}
+          role={team.role}
           year={year}
           month={month}
           setlists={monthSetlists}

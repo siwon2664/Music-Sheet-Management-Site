@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { resolveActiveTeam } from '@/lib/activeTeam';
 import MembersManager, { type MemberRow } from '@/components/dashboard/members/MembersManager';
 import InviteLinkSection from '@/components/team/InviteLinkSection';
 
@@ -15,24 +16,18 @@ export default async function MembersPage() {
     redirect('/login');
   }
 
-  const { data: membership } = await supabase
-    .from('team_members')
-    .select('team_id, role')
-    .eq('user_id', user.id)
-    .order('joined_at', { ascending: true })
-    .limit(1)
-    .maybeSingle();
+  const { activeTeam } = await resolveActiveTeam(supabase, user.id);
 
-  if (!membership || membership.role !== 'LEADER') {
+  if (!activeTeam || activeTeam.role !== 'LEADER') {
     redirect('/dashboard');
   }
 
   const [{ data: team }, { data: teamMembers }] = await Promise.all([
-    supabase.from('teams').select('invite_token, created_by').eq('id', membership.team_id).single(),
+    supabase.from('teams').select('invite_token, created_by').eq('id', activeTeam.id).single(),
     supabase
       .from('team_members')
       .select('id, user_id, role, users(email, display_name)')
-      .eq('team_id', membership.team_id)
+      .eq('team_id', activeTeam.id)
       .order('joined_at', { ascending: true }),
   ]);
 
@@ -63,7 +58,7 @@ export default async function MembersPage() {
           <p className="text-sm text-gray-500 mt-1">역할을 바꾸거나 팀에서 제거할 수 있습니다.</p>
         </header>
 
-        {team && <InviteLinkSection teamId={membership.team_id} initialToken={team.invite_token} />}
+        {team && <InviteLinkSection teamId={activeTeam.id} initialToken={team.invite_token} />}
 
         <MembersManager currentUserId={user.id} initialMembers={members} />
       </div>

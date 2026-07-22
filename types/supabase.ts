@@ -368,6 +368,8 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      delete_own_account: { Args: Record<PropertyKey, never>; Returns: undefined }
+      delete_team: { Args: { p_team_id: string }; Returns: undefined }
       get_team_by_invite_token: {
         Args: { p_token: string }
         Returns: {
@@ -378,6 +380,7 @@ export type Database = {
       is_team_leader: { Args: { p_team_id: string }; Returns: boolean }
       is_team_member: { Args: { p_team_id: string }; Returns: boolean }
       join_team_via_invite: { Args: { p_token: string }; Returns: string }
+      leave_team: { Args: { p_team_id: string }; Returns: undefined }
       regenerate_invite_token: { Args: { p_team_id: string }; Returns: string }
     }
     Enums: {

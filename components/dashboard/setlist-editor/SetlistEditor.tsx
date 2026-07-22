@@ -78,6 +78,7 @@ export default function SetlistEditor({
       fileUrl: sheet.file_url,
       songForm: [],
       bpm: sheet.bpm,
+      updatedAt: sheet.updated_at,
     };
 
     setItems((prev) => {
