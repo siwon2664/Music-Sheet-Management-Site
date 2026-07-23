@@ -4,6 +4,7 @@ import { useState, type FormEvent } from 'react';
 import { UploadCloud, X } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { uploadSheetFile } from '@/lib/sheetUpload';
+import { isAllowedSheetFile, SHEET_FILE_ACCEPT, SHEET_FILE_TYPE_HINT } from '@/lib/fileTypes';
 import type { SheetRow } from './SheetsLibraryClient';
 
 interface EditSheetModalProps {
@@ -31,6 +32,12 @@ export default function EditSheetModal({ sheet, teamId, onClose, onUpdated }: Ed
     let fileFields: { file_url: string; thumbnail_url: string | null } | null = null;
 
     if (file) {
+      if (!isAllowedSheetFile(file)) {
+        setLoading(false);
+        setError(SHEET_FILE_TYPE_HINT);
+        return;
+      }
+
       const { data: uploadedFile, error: uploadError } = await uploadSheetFile(supabase, teamId, file);
       if (uploadError || !uploadedFile) {
         setLoading(false);
@@ -119,13 +126,23 @@ export default function EditSheetModal({ sheet, teamId, onClose, onUpdated }: Ed
           </div>
 
           <label className="flex flex-col gap-1 text-sm">
-            파일 교체 (선택)
+            파일 교체 (선택, PDF/PNG/JPG/WEBP)
             <div className="border border-dashed rounded px-3 py-4 flex flex-col items-center gap-2 text-gray-500">
               <UploadCloud size={20} />
               <input
                 type="file"
-                accept=".pdf,image/*"
-                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                accept={SHEET_FILE_ACCEPT}
+                onChange={(e) => {
+                  const selected = e.target.files?.[0] ?? null;
+                  if (selected && !isAllowedSheetFile(selected)) {
+                    setError(SHEET_FILE_TYPE_HINT);
+                    setFile(null);
+                    e.target.value = '';
+                    return;
+                  }
+                  setError(null);
+                  setFile(selected);
+                }}
                 className="text-xs"
               />
               <p className="text-xs text-gray-600">

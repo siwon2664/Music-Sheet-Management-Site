@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/types/supabase';
 import { buildSheetImagePaths, buildSheetStoragePath } from './storage';
 import { createDisplayImage, createThumbnailImage, isResizableImage } from './image';
+import { isAllowedSheetFile, SHEET_FILE_TYPE_HINT } from './fileTypes';
 
 export interface SheetUploadResult {
   filePath: string;
@@ -15,6 +16,10 @@ export async function uploadSheetFile(
   teamId: string,
   file: File
 ): Promise<{ data: SheetUploadResult | null; error: string | null }> {
+  if (!isAllowedSheetFile(file)) {
+    return { data: null, error: SHEET_FILE_TYPE_HINT };
+  }
+
   if (isResizableImage(file)) {
     const paths = buildSheetImagePaths(teamId, file.name);
 

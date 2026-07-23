@@ -370,6 +370,7 @@ export type Database = {
       }
       delete_own_account: { Args: Record<PropertyKey, never>; Returns: undefined }
       delete_team: { Args: { p_team_id: string }; Returns: undefined }
+      email_exists: { Args: { p_email: string }; Returns: boolean }
       get_team_by_invite_token: {
         Args: { p_token: string }
         Returns: {

@@ -4,16 +4,27 @@ import { useState, type FormEvent } from 'react';
 import { UploadCloud, X } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { uploadSheetFile } from '@/lib/sheetUpload';
+import { isAllowedSheetFile, SHEET_FILE_ACCEPT, SHEET_FILE_TYPE_HINT } from '@/lib/fileTypes';
+import { MAX_SHEETS_PER_TEAM, SHEET_LIMIT_MESSAGE } from '@/lib/limits';
 import type { SheetRow } from './SheetsLibraryClient';
 
 interface UploadSheetModalProps {
   teamId: string;
+  currentCount: number;
+  limitExempt?: boolean;
   onClose: () => void;
   onUploaded: (sheet: SheetRow) => void;
 }
 
-export default function UploadSheetModal({ teamId, onClose, onUploaded }: UploadSheetModalProps) {
+export default function UploadSheetModal({
+  teamId,
+  currentCount,
+  limitExempt = false,
+  onClose,
+  onUploaded,
+}: UploadSheetModalProps) {
   const supabase = createClient();
+  const atLimit = !limitExempt && currentCount >= MAX_SHEETS_PER_TEAM;
 
   const [title, setTitle] = useState('');
   const [composer, setComposer] = useState('');
@@ -26,8 +37,18 @@ export default function UploadSheetModal({ teamId, onClose, onUploaded }: Upload
   async function handleUpload(e: FormEvent) {
     e.preventDefault();
 
+    if (atLimit) {
+      setError(SHEET_LIMIT_MESSAGE);
+      return;
+    }
+
     if (!file) {
       setError('파일을 선택해주세요.');
+      return;
+    }
+
+    if (!isAllowedSheetFile(file)) {
+      setError(SHEET_FILE_TYPE_HINT);
       return;
     }
 
@@ -138,20 +159,31 @@ export default function UploadSheetModal({ teamId, onClose, onUploaded }: Upload
           </div>
 
           <label className="flex flex-col gap-1 text-sm">
-            파일 (PDF, 이미지 등)
+            파일 (PDF, PNG, JPG, WEBP)
             <div className="border border-dashed rounded px-3 py-4 flex flex-col items-center gap-2 text-gray-500">
               <UploadCloud size={20} />
               <input
                 type="file"
                 required
-                accept=".pdf,image/*"
-                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                accept={SHEET_FILE_ACCEPT}
+                onChange={(e) => {
+                  const selected = e.target.files?.[0] ?? null;
+                  if (selected && !isAllowedSheetFile(selected)) {
+                    setError(SHEET_FILE_TYPE_HINT);
+                    setFile(null);
+                    e.target.value = '';
+                    return;
+                  }
+                  setError(null);
+                  setFile(selected);
+                }}
                 className="text-xs"
               />
               {file && <p className="text-xs text-gray-600">{file.name}</p>}
             </div>
           </label>
 
+          {atLimit && <p className="text-sm text-red-600">{SHEET_LIMIT_MESSAGE}</p>}
           {error && <p className="text-sm text-red-600">{error}</p>}
 
           <div className="flex gap-2 justify-end mt-2">
@@ -164,7 +196,7 @@ export default function UploadSheetModal({ teamId, onClose, onUploaded }: Upload
             </button>
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || atLimit}
               className="bg-black text-white rounded px-4 py-2 text-sm disabled:opacity-50"
             >
               {loading ? '업로드 중...' : '추가하기'}

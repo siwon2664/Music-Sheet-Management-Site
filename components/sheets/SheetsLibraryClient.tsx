@@ -18,6 +18,7 @@ import { createClient } from '@/lib/supabase/client';
 import { matchesSearch } from '@/lib/hangul';
 import { isPdfFile, stripFileExtension } from '@/lib/storage';
 import { uploadSheetFile } from '@/lib/sheetUpload';
+import { isExemptFromSheetLimit, MAX_SHEETS_PER_TEAM, SHEET_LIMIT_MESSAGE } from '@/lib/limits';
 import { getCachedSignedUrl, setCachedSignedUrl } from '@/lib/signedUrlCache';
 import { exportSheetsAsMergedPdf, exportSheetsAsSeparatePdfs, type ExportSheetSource } from '@/lib/exportSheets';
 import type { TeamRole } from '@/types/supabase';
@@ -44,11 +45,12 @@ type SortDirection = 'asc' | 'desc';
 
 interface SheetsLibraryClientProps {
   teamId: string;
+  teamName: string;
   role: TeamRole;
   initialSheets: SheetRow[];
 }
 
-export default function SheetsLibraryClient({ teamId, role, initialSheets }: SheetsLibraryClientProps) {
+export default function SheetsLibraryClient({ teamId, teamName, role, initialSheets }: SheetsLibraryClientProps) {
   const router = useRouter();
   const supabase = createClient();
 
@@ -74,6 +76,8 @@ export default function SheetsLibraryClient({ teamId, role, initialSheets }: She
   const [downloadError, setDownloadError] = useState<string | null>(null);
 
   const canDelete = role === 'LEADER';
+  const sheetLimitExempt = isExemptFromSheetLimit(teamName);
+  const sheetLimitReached = !sheetLimitExempt && sheets.length >= MAX_SHEETS_PER_TEAM;
 
   const filteredSorted = useMemo(() => {
     const filtered = sheets.filter((sheet) => matchesSearch(sheet.title, query));
@@ -282,7 +286,16 @@ export default function SheetsLibraryClient({ teamId, role, initialSheets }: She
   }
 
   async function handleBulkUpload(files: File[]) {
-    setBulkUploading({ done: 0, total: files.length });
+    const available = sheetLimitExempt ? files.length : Math.max(0, MAX_SHEETS_PER_TEAM - sheets.length);
+    const filesToUpload = files.slice(0, available);
+    const skippedFiles = files.slice(available);
+
+    if (filesToUpload.length === 0) {
+      setError(SHEET_LIMIT_MESSAGE);
+      return;
+    }
+
+    setBulkUploading({ done: 0, total: filesToUpload.length });
     setError(null);
 
     const {
@@ -296,9 +309,9 @@ export default function SheetsLibraryClient({ teamId, role, initialSheets }: She
     }
 
     const uploaded: SheetRow[] = [];
-    const failed: string[] = [];
+    const failed: string[] = skippedFiles.map((file) => `${file.name}: ${SHEET_LIMIT_MESSAGE}`);
 
-    for (const file of files) {
+    for (const file of filesToUpload) {
       const { data: uploadedFile, error: uploadError } = await uploadSheetFile(supabase, teamId, file);
 
       if (uploadError || !uploadedFile) {
@@ -421,9 +434,12 @@ export default function SheetsLibraryClient({ teamId, role, initialSheets }: She
           <button
             type="button"
             onClick={() => setShowUploadModal(true)}
-            className="flex items-center gap-2 text-sm font-medium border rounded px-4 py-2 hover:bg-gray-50"
+            disabled={sheetLimitReached}
+            title={sheetLimitReached ? SHEET_LIMIT_MESSAGE : undefined}
+            className="flex items-center gap-2 text-sm font-medium border rounded px-4 py-2 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            <Plus size={16} />새 악보 추가
+            <Plus size={16} />
+            새 악보 추가{!sheetLimitExempt && ` (${sheets.length}/${MAX_SHEETS_PER_TEAM})`}
           </button>
         </div>
       </div>
@@ -555,6 +571,8 @@ export default function SheetsLibraryClient({ teamId, role, initialSheets }: She
       {showUploadModal && (
         <UploadSheetModal
           teamId={teamId}
+          currentCount={sheets.length}
+          limitExempt={sheetLimitExempt}
           onClose={() => setShowUploadModal(false)}
           onUploaded={(sheet) => {
             setSheets((prev) => [sheet, ...prev]);

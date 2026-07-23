@@ -43,6 +43,7 @@ export default async function SheetsLibraryPage() {
 
         <SheetsLibraryClient
           teamId={activeTeam.id}
+          teamName={activeTeam.name}
           role={activeTeam.role}
           initialSheets={sheets ?? []}
         />
