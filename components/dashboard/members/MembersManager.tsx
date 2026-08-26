@@ -100,7 +100,7 @@ export default function MembersManager({ currentUserId, initialMembers }: Member
 
   return (
     <div className="flex flex-col gap-3">
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
 
       <ul className="flex flex-col gap-2">
         {members.map((member) => {
@@ -114,19 +114,19 @@ export default function MembersManager({ currentUserId, initialMembers }: Member
           return (
             <li
               key={member.id}
-              className={`bg-white border rounded-lg px-4 py-3 flex items-center justify-between gap-3 ${
-                hasPendingChange ? 'border-black' : ''
+              className={`bg-surface border border-border rounded-lg px-4 py-3 flex items-center justify-between gap-3 ${
+                hasPendingChange ? 'border-accent' : ''
               }`}
             >
               <div className="min-w-0">
                 <p className="font-medium truncate">
                   {member.displayName || member.email}
-                  {isSelf && <span className="text-xs text-gray-400 ml-1">(나)</span>}
+                  {isSelf && <span className="text-xs text-muted ml-1">(나)</span>}
                   {hasPendingChange && (
-                    <span className="text-xs text-gray-500 ml-1.5">(변경 예정: {draftRole})</span>
+                    <span className="text-xs text-muted ml-1.5">(변경 예정: {draftRole})</span>
                   )}
                 </p>
-                <p className="text-xs text-gray-500 truncate">{member.email}</p>
+                <p className="text-xs text-muted truncate">{member.email}</p>
               </div>
 
               <div className="flex items-center gap-2 shrink-0">
@@ -137,7 +137,7 @@ export default function MembersManager({ currentUserId, initialMembers }: Member
                   }
                   disabled={applying || busy || locked}
                   title={member.isCreator ? '이 팀을 만든 사람은 항상 팀장입니다.' : undefined}
-                  className="border rounded px-2 py-1 text-xs disabled:opacity-50"
+                  className="border border-border bg-surface rounded px-2 py-1 text-xs disabled:opacity-50"
                 >
                   <option value="LEADER">LEADER</option>
                   <option value="MEMBER">MEMBER</option>
@@ -147,7 +147,7 @@ export default function MembersManager({ currentUserId, initialMembers }: Member
                   type="button"
                   onClick={() => handleRemove(member)}
                   disabled={applying || busy || locked}
-                  className="text-gray-400 hover:text-red-600 disabled:opacity-30 disabled:cursor-not-allowed"
+                  className="text-muted hover:text-red-600 dark:hover:text-red-400 disabled:opacity-30 disabled:cursor-not-allowed"
                   aria-label="팀에서 제거"
                   title={
                     member.isCreator
@@ -169,7 +169,7 @@ export default function MembersManager({ currentUserId, initialMembers }: Member
         type="button"
         onClick={handleApplyAll}
         disabled={applying || pendingChanges.length === 0}
-        className="self-end text-sm font-medium bg-black text-white rounded px-4 py-2 disabled:opacity-30 disabled:cursor-not-allowed"
+        className="self-end text-sm font-medium bg-accent text-accent-foreground hover:bg-accent-hover rounded px-4 py-2 disabled:opacity-30 disabled:cursor-not-allowed"
       >
         {applying ? '적용 중...' : '변경사항 적용'}
       </button>

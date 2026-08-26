@@ -23,24 +23,24 @@ export default async function SettingsPage() {
       : { data: null };
 
   return (
-    <main className="min-h-screen bg-gray-50 p-4 md:p-6">
+    <main className="min-h-screen bg-background p-4 md:p-6">
       <div className="max-w-lg w-full mx-auto flex flex-col gap-6">
         <Link
           href="/dashboard"
-          className="inline-flex items-center gap-1 text-sm text-gray-600 border rounded-lg px-3 py-2 w-fit hover:bg-gray-50 active:bg-gray-100"
+          className="inline-flex items-center gap-1 text-sm text-muted border border-border rounded-lg px-3 py-2 w-fit hover:bg-surface-hover active:bg-surface-hover"
         >
           ← 대시보드로
         </Link>
 
         <header>
-          <h1 className="text-2xl font-bold">설정</h1>
+          <h1 className="text-2xl font-bold text-foreground">설정</h1>
         </header>
 
         {activeTeam && team ? (
           <InviteLinkSection teamId={activeTeam.id} initialToken={team.invite_token} />
         ) : (
-          <div className="bg-white border rounded-lg p-6">
-            <p className="text-sm text-gray-500">
+          <div className="bg-surface border border-border rounded-lg p-6">
+            <p className="text-sm text-muted">
               {activeTeam ? '팀 코드는 팀장만 확인할 수 있습니다.' : '설정 항목은 준비 중입니다.'}
             </p>
           </div>

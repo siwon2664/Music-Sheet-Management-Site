@@ -49,17 +49,17 @@ export default function UpdateDisplayNameForm({ userId, initialDisplayName }: Up
           value={displayName}
           onChange={(e) => setDisplayName(e.target.value)}
           placeholder="밴드에서 사용할 이름"
-          className="border rounded px-3 py-2"
+          className="border border-border bg-surface rounded px-3 py-2"
         />
       </label>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
-      {saved && <p className="text-sm text-green-600">저장됐습니다.</p>}
+      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+      {saved && <p className="text-sm text-green-600 dark:text-green-400">저장됐습니다.</p>}
 
       <button
         type="submit"
         disabled={loading}
-        className="self-start bg-black text-white rounded px-4 py-2 text-sm font-medium disabled:opacity-50"
+        className="self-start bg-accent text-accent-foreground hover:bg-accent-hover rounded px-4 py-2 text-sm font-medium disabled:opacity-50"
       >
         {loading ? '저장 중...' : '저장'}
       </button>

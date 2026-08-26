@@ -47,15 +47,15 @@ export default function DeleteAccountSection({ email }: DeleteAccountSectionProp
 
   if (!expanded) {
     return (
-      <div className="border border-red-200 rounded-lg p-4 flex items-center justify-between gap-3">
+      <div className="border border-red-200 dark:border-red-500/40 rounded-lg p-4 flex items-center justify-between gap-3">
         <div>
-          <p className="text-sm font-semibold text-red-600">회원 탈퇴</p>
-          <p className="text-xs text-gray-500 mt-0.5">계정을 삭제하면 되돌릴 수 없습니다.</p>
+          <p className="text-sm font-semibold text-red-600 dark:text-red-400">회원 탈퇴</p>
+          <p className="text-xs text-muted mt-0.5">계정을 삭제하면 되돌릴 수 없습니다.</p>
         </div>
         <button
           type="button"
           onClick={() => setExpanded(true)}
-          className="flex items-center gap-1.5 shrink-0 text-sm border border-red-200 text-red-600 rounded px-3 py-2 hover:bg-red-50"
+          className="flex items-center gap-1.5 shrink-0 text-sm border border-red-200 dark:border-red-500/40 text-red-600 dark:text-red-400 rounded px-3 py-2 hover:bg-red-50 dark:hover:bg-red-500/10"
         >
           <Trash2 size={14} />
           회원 탈퇴
@@ -65,8 +65,8 @@ export default function DeleteAccountSection({ email }: DeleteAccountSectionProp
   }
 
   return (
-    <div className="border border-red-200 rounded-lg p-4 flex flex-col gap-4">
-      <div className="flex items-start gap-2 text-red-700 bg-red-50 border border-red-200 rounded px-3 py-2.5">
+    <div className="border border-red-200 dark:border-red-500/40 rounded-lg p-4 flex flex-col gap-4">
+      <div className="flex items-start gap-2 text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/40 rounded px-3 py-2.5">
         <AlertTriangle size={16} className="shrink-0 mt-0.5" />
         <ul className="text-xs leading-relaxed list-disc pl-4 space-y-0.5">
           <li>탈퇴하면 계정과 로그인 정보가 즉시 삭제되며 되돌릴 수 없습니다.</li>
@@ -84,11 +84,11 @@ export default function DeleteAccountSection({ email }: DeleteAccountSectionProp
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="border rounded px-3 py-2"
+            className="border border-border bg-surface rounded px-3 py-2"
           />
         </label>
 
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
 
         <div className="flex items-center gap-2">
           <button
@@ -106,7 +106,7 @@ export default function DeleteAccountSection({ email }: DeleteAccountSectionProp
               setError(null);
             }}
             disabled={loading}
-            className="text-sm text-gray-500 hover:text-gray-900 disabled:opacity-50"
+            className="text-sm text-muted hover:text-foreground disabled:opacity-50"
           >
             취소
           </button>

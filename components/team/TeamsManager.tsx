@@ -78,24 +78,24 @@ export default function TeamsManager({ teams: initialTeams, activeTeamId }: Team
   }
 
   if (teams.length === 0) {
-    return <p className="text-sm text-gray-500">속한 팀이 없습니다.</p>;
+    return <p className="text-sm text-muted">속한 팀이 없습니다.</p>;
   }
 
   return (
     <div className="flex flex-col gap-2">
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
 
       {teams.map((team) => (
         <div
           key={team.id}
-          className="border rounded-lg px-4 py-3 flex items-center justify-between gap-3"
+          className="border border-border rounded-lg px-4 py-3 flex items-center justify-between gap-3"
         >
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
               <span className="font-medium truncate">{team.name}</span>
-              {team.id === activeTeamId && <Check size={14} className="text-green-600 shrink-0" />}
+              {team.id === activeTeamId && <Check size={14} className="text-green-600 dark:text-green-400 shrink-0" />}
             </div>
-            <p className="text-xs text-gray-500">
+            <p className="text-xs text-muted">
               {team.role === 'LEADER' ? '팀장' : '멤버'}
               {team.isCreator ? ' · 개설자' : ''}
             </p>
@@ -107,7 +107,7 @@ export default function TeamsManager({ teams: initialTeams, activeTeamId }: Team
                 type="button"
                 onClick={() => switchTo(team.id)}
                 disabled={busyId === team.id}
-                className="text-xs border rounded px-2.5 py-1.5 hover:bg-gray-50 disabled:opacity-50"
+                className="text-xs border border-border rounded px-2.5 py-1.5 hover:bg-surface-hover disabled:opacity-50"
               >
                 전환
               </button>
@@ -117,7 +117,7 @@ export default function TeamsManager({ teams: initialTeams, activeTeamId }: Team
                 type="button"
                 onClick={() => handleDelete(team)}
                 disabled={busyId === team.id}
-                className="flex items-center gap-1 text-xs border border-red-200 text-red-600 rounded px-2.5 py-1.5 hover:bg-red-50 disabled:opacity-50"
+                className="flex items-center gap-1 text-xs border border-red-200 dark:border-red-500/40 text-red-600 dark:text-red-400 rounded px-2.5 py-1.5 hover:bg-red-50 dark:hover:bg-red-500/10 disabled:opacity-50"
               >
                 <Trash2 size={12} />
                 삭제
@@ -128,7 +128,7 @@ export default function TeamsManager({ teams: initialTeams, activeTeamId }: Team
                 type="button"
                 onClick={() => handleLeave(team)}
                 disabled={busyId === team.id}
-                className="flex items-center gap-1 text-xs border rounded px-2.5 py-1.5 hover:bg-gray-50 disabled:opacity-50"
+                className="flex items-center gap-1 text-xs border border-border rounded px-2.5 py-1.5 hover:bg-surface-hover disabled:opacity-50"
               >
                 <LogOut size={12} />
                 탈퇴

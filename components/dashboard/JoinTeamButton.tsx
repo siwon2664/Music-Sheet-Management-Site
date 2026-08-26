@@ -41,12 +41,12 @@ export default function JoinTeamButton({ token }: JoinTeamButtonProps) {
 
   return (
     <div className="flex flex-col gap-3">
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
       <button
         type="button"
         onClick={handleJoin}
         disabled={loading}
-        className="bg-black text-white rounded px-4 py-2 text-sm font-medium disabled:opacity-50"
+        className="bg-accent text-accent-foreground hover:bg-accent-hover rounded px-4 py-2 text-sm font-medium disabled:opacity-50"
       >
         {loading ? '참여 중...' : '참여하기'}
       </button>

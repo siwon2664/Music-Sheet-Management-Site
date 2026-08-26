@@ -20,14 +20,14 @@ export default async function JoinTeamPage({ params }: { params: { token: string
 
   if (!invite) {
     return (
-      <main className="min-h-screen flex flex-col items-center justify-center gap-4 p-8 text-center">
-        <h1 className="text-xl font-semibold">유효하지 않은 초대 링크입니다</h1>
-        <p className="text-sm text-gray-500">
+      <main className="min-h-screen flex flex-col items-center justify-center gap-4 p-8 text-center bg-background">
+        <h1 className="text-xl font-semibold text-foreground">유효하지 않은 초대 링크입니다</h1>
+        <p className="text-sm text-muted">
           링크가 만료되었거나 잘못된 주소일 수 있습니다. 팀장에게 새 초대 링크를 요청해주세요.
         </p>
         <Link
           href="/dashboard"
-          className="inline-flex items-center gap-1 text-sm text-gray-600 border rounded-lg px-3 py-2 w-fit hover:bg-gray-50 active:bg-gray-100"
+          className="inline-flex items-center gap-1 text-sm text-muted border border-border rounded-lg px-3 py-2 w-fit hover:bg-surface-hover active:bg-surface-hover"
         >
           대시보드로
         </Link>
@@ -47,9 +47,9 @@ export default async function JoinTeamPage({ params }: { params: { token: string
   }
 
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center gap-4 p-8 text-center">
-      <h1 className="text-xl font-semibold">{invite.team_name} 팀에 참여하시겠어요?</h1>
-      <p className="text-sm text-gray-500">{user.email}(으)로 팀에 합류합니다.</p>
+    <main className="min-h-screen flex flex-col items-center justify-center gap-4 p-8 text-center bg-background">
+      <h1 className="text-xl font-semibold text-foreground">{invite.team_name} 팀에 참여하시겠어요?</h1>
+      <p className="text-sm text-muted">{user.email}(으)로 팀에 합류합니다.</p>
       <JoinTeamButton token={params.token} />
     </main>
   );

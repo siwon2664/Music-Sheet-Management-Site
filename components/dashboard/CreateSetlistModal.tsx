@@ -61,18 +61,18 @@ export default function CreateSetlistModal({ teamId, date, onClose }: CreateSetl
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="bg-white rounded-lg shadow-lg w-full max-w-sm p-6 relative">
+      <div className="bg-surface text-foreground rounded-lg shadow-lg w-full max-w-sm p-6 relative">
         <button
           type="button"
           onClick={onClose}
-          className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+          className="absolute top-4 right-4 text-muted hover:text-foreground"
           aria-label="닫기"
         >
           <X size={18} />
         </button>
 
         <h2 className="text-lg font-semibold mb-1">새 콘티 만들기</h2>
-        <p className="text-sm text-gray-500 mb-4">{date}</p>
+        <p className="text-sm text-muted mb-4">{date}</p>
 
         <form onSubmit={handleCreateSetlist} className="flex flex-col gap-4">
           <label className="flex flex-col gap-1 text-sm">
@@ -83,7 +83,7 @@ export default function CreateSetlistModal({ teamId, date, onClose }: CreateSetl
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="예: 7월 정기 합주"
-              className="border rounded px-3 py-2"
+              className="border border-border bg-surface rounded px-3 py-2"
               autoFocus
             />
           </label>
@@ -93,25 +93,25 @@ export default function CreateSetlistModal({ teamId, date, onClose }: CreateSetl
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              className="border rounded px-3 py-2"
+              className="border border-border bg-surface rounded px-3 py-2"
               rows={3}
             />
           </label>
 
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
 
           <div className="flex gap-2 justify-end mt-2">
             <button
               type="button"
               onClick={onClose}
-              className="rounded px-4 py-2 text-sm border hover:bg-gray-50"
+              className="rounded px-4 py-2 text-sm border border-border hover:bg-surface-hover"
             >
               취소
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="bg-black text-white rounded px-4 py-2 text-sm disabled:opacity-50"
+              className="bg-accent text-accent-foreground rounded px-4 py-2 text-sm hover:bg-accent-hover disabled:opacity-50"
             >
               {loading ? '생성 중...' : '콘티 생성'}
             </button>

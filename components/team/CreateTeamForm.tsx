@@ -55,7 +55,7 @@ export default function CreateTeamForm() {
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="예: 우리 밴드"
-          className="border rounded px-3 py-2"
+          className="border border-border bg-surface rounded px-3 py-2"
         />
       </label>
 
@@ -64,16 +64,16 @@ export default function CreateTeamForm() {
         <textarea
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          className="border rounded px-3 py-2"
+          className="border border-border bg-surface rounded px-3 py-2"
         />
       </label>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
 
       <button
         type="submit"
         disabled={loading}
-        className="bg-black text-white rounded px-4 py-2 disabled:opacity-50"
+        className="bg-accent text-accent-foreground hover:bg-accent-hover rounded px-4 py-2 disabled:opacity-50"
       >
         {loading ? '생성 중...' : '팀 생성 (자동으로 팀장이 됩니다)'}
       </button>

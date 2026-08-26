@@ -1,3 +1,89 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/*
+ * 색 토큰 — 라이트는 Radix Colors(radix-ui.com/colors)의 Slate(중립)·Indigo(포인트)
+ * 스케일 값을 그대로 옮겨 썼다. 다크도 같은 계열(쿨 뉴트럴, 은은하게 푸른 기운이
+ * 도는 무채색)로 맞췄다. 라이트는 :root, 다크는 .dark 클래스로 덮어써서
+ * (next-themes가 <html>에 class="dark"를 붙여주는 방식) 컴포넌트는 항상
+ * bg-background / text-foreground 같은 의미 이름만 쓰면 되고, 실제 값은
+ * 테마에 따라 자동으로 바뀐다.
+ *
+ * 각 스케일의 단계 쓰임(라이트 Radix 기준, 다크도 같은 구조를 따름):
+ *  1  앱 배경        6  옅은 테두리/구분선
+ *  2  카드/패널 배경   7  일반 테두리
+ *  3  hover 배경     9  솔리드(버튼) 배경
+ *  11 보조 텍스트     12 본문 텍스트
+ */
+:root {
+  /* 체크박스, input, 스크롤바 같은 브라우저 기본 UI가 OS 설정이 아니라
+     실제로 적용된 테마(next-themes가 붙인 .dark 클래스)를 따르게 한다. */
+  color-scheme: light;
+
+  --slate-1: #fbfcfd;
+  --slate-2: #f8f9fa;
+  --slate-3: #f1f3f5;
+  --slate-6: #e0e3e6;
+  --slate-7: #d7dbdf;
+  --slate-11: #687076;
+  --slate-12: #11181c;
+
+  --indigo-3: #edf2fe;
+  --indigo-9: #3e63dd;
+  --indigo-10: #3358d4;
+  --indigo-11: #3a5bc7;
+
+  --background: var(--slate-1);
+  --surface: #ffffff;
+  --surface-hover: var(--slate-3);
+  --border: var(--slate-6);
+  --border-strong: var(--slate-7);
+  --foreground: var(--slate-12);
+  --muted-foreground: var(--slate-11);
+
+  --accent: var(--indigo-9);
+  --accent-hover: var(--indigo-10);
+  --accent-foreground: #ffffff;
+  --accent-subtle: var(--indigo-3);
+  --accent-subtle-foreground: var(--indigo-11);
+}
+
+.dark {
+  color-scheme: dark;
+
+  /* 거의 블랙에 가까운 쿨 뉴트럴 — 카드는 배경보다 한 단계 밝은 그레이로
+     "떠 있는" 느낌을 주고, 테두리는 아주 옅게만 써서 대비는 주로 면(elevation)으로 낸다. */
+  --slate-1: #111113;
+  --slate-2: #18191b;
+  --slate-3: #212225;
+  --slate-6: #363a3f;
+  --slate-7: #43484e;
+  --slate-11: #b0b4ba;
+  --slate-12: #edeef0;
+
+  /* 은은한 쿨 그레이 포인트 컬러 */
+  --indigo-3: rgba(203, 208, 214, 0.14);
+  --indigo-9: #cbd0d6;
+  --indigo-10: #b7bcc3;
+  --indigo-11: #cbd0d6;
+
+  --background: var(--slate-1);
+  --surface: var(--slate-2);
+  --surface-hover: var(--slate-3);
+  --border: var(--slate-6);
+  --border-strong: var(--slate-7);
+  --foreground: var(--slate-12);
+  --muted-foreground: var(--slate-11);
+
+  --accent: var(--indigo-9);
+  --accent-hover: var(--indigo-10);
+  --accent-foreground: #14171a;
+  --accent-subtle: var(--indigo-3);
+  --accent-subtle-foreground: var(--indigo-11);
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+}

@@ -90,7 +90,7 @@ export default function SwipeToDeleteRow({ onDelete, children }: SwipeToDeleteRo
           transition: dragging ? 'none' : 'transform 150ms ease',
           touchAction: 'pan-y',
         }}
-        className="relative bg-white"
+        className="relative bg-surface"
       >
         {children}
       </div>

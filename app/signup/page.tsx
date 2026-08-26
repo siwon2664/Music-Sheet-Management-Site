@@ -15,14 +15,14 @@ export default function SignUpPage({
   const privacyText = fs.readFileSync(path.join(process.cwd(), 'docs/privacy-policy.md'), 'utf-8');
 
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center gap-8 p-8 bg-gray-50">
+    <main className="min-h-screen flex flex-col items-center justify-center gap-8 p-8 bg-background">
       <AuthBrandHeader />
 
-      <div className="w-full max-w-sm bg-white border rounded-lg shadow-sm p-6">
+      <div className="w-full max-w-sm bg-surface text-foreground border border-border rounded-lg shadow-sm p-6">
         <SignUpForm redirectTo={redirectTo} termsText={termsText} privacyText={privacyText} />
       </div>
 
-      <p className="text-sm text-gray-500">
+      <p className="text-sm text-muted">
         이미 계정이 있으신가요?{' '}
         <Link href={`/login?redirect=${encodeURIComponent(redirectTo)}`} className="underline">
           로그인

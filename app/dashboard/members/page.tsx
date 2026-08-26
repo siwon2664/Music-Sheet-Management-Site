@@ -44,18 +44,18 @@ export default async function MembersPage() {
   });
 
   return (
-    <main className="min-h-screen bg-gray-50 p-4 md:p-6">
+    <main className="min-h-screen bg-background p-4 md:p-6">
       <div className="max-w-2xl w-full mx-auto flex flex-col gap-4">
         <Link
           href="/dashboard"
-          className="inline-flex items-center gap-1 text-sm text-gray-600 border rounded-lg px-3 py-2 w-fit hover:bg-gray-50 active:bg-gray-100"
+          className="inline-flex items-center gap-1 text-sm text-muted border border-border rounded-lg px-3 py-2 w-fit hover:bg-surface-hover active:bg-surface-hover"
         >
           ← 대시보드로
         </Link>
 
         <header>
-          <h1 className="text-2xl font-bold">멤버 관리</h1>
-          <p className="text-sm text-gray-500 mt-1">역할을 바꾸거나 팀에서 제거할 수 있습니다.</p>
+          <h1 className="text-2xl font-bold text-foreground">멤버 관리</h1>
+          <p className="text-sm text-muted mt-1">역할을 바꾸거나 팀에서 제거할 수 있습니다.</p>
         </header>
 
         {team && <InviteLinkSection teamId={activeTeam.id} initialToken={team.invite_token} />}

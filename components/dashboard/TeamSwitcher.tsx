@@ -55,27 +55,27 @@ export default function TeamSwitcher({ teamName, teams, activeTeamId }: TeamSwit
       <button
         type="button"
         onClick={() => setOpen((prev) => !prev)}
-        className="flex items-center gap-1.5 min-w-0 text-left rounded hover:bg-gray-50 -mx-1 px-1 py-0.5"
+        className="flex items-center gap-1.5 min-w-0 text-left rounded hover:bg-surface-hover -mx-1 px-1 py-0.5"
       >
         <div className="min-w-0 leading-tight">
-          <h1 className="text-lg md:text-xl font-bold truncate">Band Setlist</h1>
-          <p className="text-xs text-gray-400 truncate">{teamName}</p>
+          <h1 className="text-lg md:text-xl font-bold truncate text-foreground">Band Setlist</h1>
+          <p className="text-xs text-muted truncate">{teamName}</p>
         </div>
-        <ChevronDown size={14} className="text-gray-400 shrink-0 mt-3" />
+        <ChevronDown size={14} className="text-muted shrink-0 mt-3" />
       </button>
 
       {open && (
-        <div className="absolute left-0 top-full mt-2 w-56 bg-white border rounded-lg shadow-lg py-1 z-50">
+        <div className="absolute left-0 top-full mt-2 w-56 bg-surface text-foreground border border-border rounded-lg shadow-lg py-1 z-50">
           {teams.map((t) => (
             <button
               key={t.id}
               type="button"
               onClick={() => switchTeam(t.id)}
               disabled={switching}
-              className="w-full flex items-center justify-between gap-2 px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
+              className="w-full flex items-center justify-between gap-2 px-3 py-2 text-sm hover:bg-surface-hover disabled:opacity-50"
             >
               <span className="truncate">{t.name}</span>
-              {t.id === activeTeamId && <Check size={14} className="text-gray-500 shrink-0" />}
+              {t.id === activeTeamId && <Check size={14} className="text-accent shrink-0" />}
             </button>
           ))}
         </div>

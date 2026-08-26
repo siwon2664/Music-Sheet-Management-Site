@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
-import { Check, X } from 'lucide-react';
+import { Check } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { isPdfFile } from '@/lib/storage';
 import { cacheDrawing, cacheSheetFile, isSheetCached } from '@/lib/offlineSheetCache';
@@ -63,6 +63,35 @@ export default function PerformanceMode({ items, teamId, initialIndex = 0, onClo
     if (deltaX > 0) goPrev();
     else goNext();
   }
+
+  // 연주 모드가 열려있는 동안 뒤에 있는 콘티 편집 화면이 같이 스크롤/바운스되지
+  // 않도록 막는다. 특히 iPad Safari는 전체화면 API가 항상 성공하는 게 아니고,
+  // overflow:hidden만으로는 배경이 여전히 스크롤되거나 오버스크롤 바운스로
+  // 화면 아래쪽에 뒷화면이 살짝 비쳐 보일 수 있어서, body를 fixed로 고정해
+  // 뒷화면 자체를 완전히 움직이지 못하게 한다. (SheetPreviewModal과 동일한 처리)
+  useEffect(() => {
+    const scrollY = window.scrollY;
+    const body = document.body;
+    const original = {
+      overflow: body.style.overflow,
+      position: body.style.position,
+      top: body.style.top,
+      width: body.style.width,
+    };
+
+    body.style.overflow = 'hidden';
+    body.style.position = 'fixed';
+    body.style.top = `-${scrollY}px`;
+    body.style.width = '100%';
+
+    return () => {
+      body.style.overflow = original.overflow;
+      body.style.position = original.position;
+      body.style.top = original.top;
+      body.style.width = original.width;
+      window.scrollTo(0, scrollY);
+    };
+  }, []);
 
   // 전체화면 진입 요청은 호출 측(버튼 클릭 핸들러)에서 이미 수행한다.
   // 여기서는 전체화면 종료를 감지해 모드를 닫고, 언마운트 시 전체화면을 해제한다.
@@ -283,8 +312,12 @@ export default function PerformanceMode({ items, teamId, initialIndex = 0, onClo
   return (
     <div className="fixed inset-0 z-50 bg-black flex flex-col touch-none">
       <div className="flex items-stretch border-b border-white/15 text-white/90">
-        <div className="min-w-0 flex-1 border-r border-white/15 px-4 py-3">
-          <p className="font-semibold truncate flex items-center gap-1.5">
+        {/* 왼쪽은 비워둔다 — 전체화면 상태에서 브라우저가 자체적으로 띄우는
+            전체화면 종료 버튼이 이 자리(좌상단)에 겹쳐서 뜨기 때문에, 우리
+            쪽 UI를 여기 두면 서로 가려서 지저분해 보인다. */}
+        <div className="flex-1" aria-hidden="true" />
+        <div className="min-w-0 border-r border-white/15 px-4 py-3">
+          <p className="font-semibold truncate flex items-center justify-end gap-1.5">
             {item?.title}
             {hasCachedCurrent && (
               <span title="오프라인 저장됨" className="inline-flex text-green-400 shrink-0">
@@ -292,24 +325,16 @@ export default function PerformanceMode({ items, teamId, initialIndex = 0, onClo
               </span>
             )}
           </p>
-          <p className="text-xs text-white/50 mt-0.5">
+          <p className="text-xs text-white/50 mt-0.5 text-right">
             {index + 1} / {items.length}
             {cacheChecked && <span className="ml-2 text-white/30">· 오프라인 저장 {cachedCount}/{items.length}</span>}
           </p>
         </div>
-        <div className="shrink-0 flex items-center gap-3 px-4 py-3">
+        <div className="shrink-0 flex items-center px-4 py-3">
           <div className="text-right">
             {effectiveKey && <p className="text-sm font-semibold">Key {effectiveKey}</p>}
             {item?.bpm && <p className="text-xs text-white/50 mt-0.5">{item.bpm} BPM</p>}
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="shrink-0 text-white/70 hover:text-white p-1"
-            aria-label="연주 모드 종료"
-          >
-            <X size={24} />
-          </button>
         </div>
       </div>
 

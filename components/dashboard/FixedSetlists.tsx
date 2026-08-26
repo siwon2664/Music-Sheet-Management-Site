@@ -23,14 +23,14 @@ export default function FixedSetlists({ setlists, teamId, role }: FixedSetlistsP
   if (setlists.length === 0 && role !== 'LEADER') return null;
 
   return (
-    <section className="mb-6 bg-white border rounded-lg p-4 md:p-6">
+    <section className="mb-6 bg-surface border border-border rounded-lg p-4 md:p-6">
       <div className="flex items-center justify-between gap-3 mb-3">
-        <h2 className="text-sm font-semibold text-gray-500">고정 콘티</h2>
+        <h2 className="text-sm font-semibold text-muted">고정 콘티</h2>
         {role === 'LEADER' && (
           <button
             type="button"
             onClick={() => setShowCreateModal(true)}
-            className="flex items-center gap-1 text-xs font-medium border rounded-full px-3 py-1.5 hover:bg-gray-50"
+            className="flex items-center gap-1 text-xs font-medium border border-border rounded-full px-3 py-1.5 hover:bg-surface-hover"
           >
             <Plus size={12} />
             고정 콘티 추가
@@ -44,7 +44,7 @@ export default function FixedSetlists({ setlists, teamId, role }: FixedSetlistsP
             <Link
               key={setlist.id}
               href={`/dashboard/setlist/${setlist.id}`}
-              className="flex items-center gap-2 border rounded-full px-4 py-2 text-sm font-medium hover:bg-gray-50"
+              className="flex items-center gap-2 border border-border rounded-full px-4 py-2 text-sm font-medium hover:bg-surface-hover"
             >
               <Pin size={14} />
               {setlist.title}

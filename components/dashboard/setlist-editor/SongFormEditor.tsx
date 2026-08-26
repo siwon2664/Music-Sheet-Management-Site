@@ -58,8 +58,8 @@ export default function SongFormEditor({ value, onChange }: SongFormEditorProps)
       <button
         type="button"
         onClick={() => setOpen((prev) => !prev)}
-        className={`flex items-center gap-1 text-xs font-medium border rounded px-2 py-1 hover:bg-gray-50 ${
-          open ? 'bg-gray-900 text-white border-gray-900 hover:bg-gray-900' : 'bg-white text-gray-600'
+        className={`flex items-center gap-1 text-xs font-medium border border-border rounded px-2 py-1 hover:bg-surface-hover ${
+          open ? 'bg-foreground text-background border-foreground hover:bg-foreground' : 'bg-surface text-muted'
         }`}
       >
         <ListMusic size={12} />
@@ -70,8 +70,8 @@ export default function SongFormEditor({ value, onChange }: SongFormEditorProps)
         <div className="flex flex-wrap items-center gap-1 mt-1.5">
           {value.map((marker, index) => (
             <span key={`${marker}-${index}`} className="flex items-center gap-1">
-              {index > 0 && <span className="text-gray-300 text-xs">→</span>}
-              <span className="text-[11px] font-medium bg-gray-900 text-white rounded px-1.5 py-0.5">
+              {index > 0 && <span className="text-muted text-xs">→</span>}
+              <span className="text-[11px] font-medium bg-foreground text-background rounded px-1.5 py-0.5">
                 {marker}
               </span>
             </span>
@@ -80,9 +80,9 @@ export default function SongFormEditor({ value, onChange }: SongFormEditorProps)
       )}
 
       {open && (
-        <div className="mt-2 border rounded-lg p-2.5 bg-gray-50 flex flex-col gap-2.5">
-          <div className="bg-white border rounded-lg p-2 flex flex-col gap-1.5">
-            <span className="text-[10px] font-medium text-gray-400">현재 순서</span>
+        <div className="mt-2 border border-border rounded-lg p-2.5 bg-surface-hover flex flex-col gap-2.5">
+          <div className="bg-surface border border-border rounded-lg p-2 flex flex-col gap-1.5">
+            <span className="text-[10px] font-medium text-muted">현재 순서</span>
             {value.length > 0 ? (
               <div className="flex flex-wrap gap-1.5">
                 {value.map((marker, index) => (
@@ -100,15 +100,15 @@ export default function SongFormEditor({ value, onChange }: SongFormEditorProps)
                     onDragLeave={() => setDragOverIndex((cur) => (cur === index ? null : cur))}
                     onDragEnd={() => setDragOverIndex(null)}
                     onDrop={(e) => handleDrop(e, index)}
-                    className={`flex items-center gap-1 text-xs font-medium bg-gray-900 text-white rounded px-2 py-1 cursor-grab active:cursor-grabbing ${
-                      dragOverIndex === index ? 'ring-2 ring-black' : ''
+                    className={`flex items-center gap-1 text-xs font-medium bg-foreground text-background rounded px-2 py-1 cursor-grab active:cursor-grabbing ${
+                      dragOverIndex === index ? 'ring-2 ring-accent' : ''
                     }`}
                   >
                     {marker}
                     <button
                       type="button"
                       onClick={() => removeAt(index)}
-                      className="text-white/60 hover:text-white"
+                      className="text-background/60 hover:text-background"
                       aria-label="삭제"
                     >
                       <X size={10} />
@@ -117,20 +117,20 @@ export default function SongFormEditor({ value, onChange }: SongFormEditorProps)
                 ))}
               </div>
             ) : (
-              <p className="text-[11px] text-gray-300">아래에서 골라 순서를 만들어보세요</p>
+              <p className="text-[11px] text-muted">아래에서 골라 순서를 만들어보세요</p>
             )}
           </div>
 
-          <div className="flex flex-col gap-1.5 border-t border-gray-200 pt-2">
+          <div className="flex flex-col gap-1.5 border-t border-border pt-2">
             {PRESET_GROUPS.map((group) => (
               <div key={group.label} className="flex flex-wrap items-center gap-1">
-                <span className="text-[10px] text-gray-400 w-8 shrink-0">{group.label}</span>
+                <span className="text-[10px] text-muted w-8 shrink-0">{group.label}</span>
                 {group.items.map((preset) => (
                   <button
                     key={preset}
                     type="button"
                     onClick={() => addMarker(preset)}
-                    className="text-xs border rounded px-1.5 py-0.5 bg-white hover:bg-gray-100"
+                    className="text-xs border border-border rounded px-1.5 py-0.5 bg-surface hover:bg-surface-hover"
                   >
                     {preset}
                   </button>
@@ -145,11 +145,11 @@ export default function SongFormEditor({ value, onChange }: SongFormEditorProps)
               value={customText}
               onChange={(e) => setCustomText(e.target.value)}
               placeholder="직접 입력 (예: 코러스)"
-              className="flex-1 min-w-0 border rounded px-2 py-1 text-xs"
+              className="flex-1 min-w-0 border border-border bg-surface rounded px-2 py-1 text-xs"
             />
             <button
               type="submit"
-              className="flex items-center gap-1 text-xs border rounded px-2 py-1 bg-white hover:bg-gray-100 shrink-0"
+              className="flex items-center gap-1 text-xs border border-border rounded px-2 py-1 bg-surface hover:bg-surface-hover shrink-0"
             >
               <Plus size={12} />
               추가

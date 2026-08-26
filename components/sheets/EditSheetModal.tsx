@@ -71,11 +71,11 @@ export default function EditSheetModal({ sheet, teamId, onClose, onUpdated }: Ed
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="bg-white rounded-lg shadow-lg w-full max-w-sm p-6 relative">
+      <div className="bg-surface text-foreground rounded-lg shadow-lg w-full max-w-sm p-6 relative">
         <button
           type="button"
           onClick={onClose}
-          className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+          className="absolute top-4 right-4 text-muted hover:text-foreground"
           aria-label="닫기"
         >
           <X size={18} />
@@ -91,7 +91,7 @@ export default function EditSheetModal({ sheet, teamId, onClose, onUpdated }: Ed
               required
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="border rounded px-3 py-2"
+              className="border border-border bg-surface rounded px-3 py-2"
               autoFocus
             />
           </label>
@@ -102,7 +102,7 @@ export default function EditSheetModal({ sheet, teamId, onClose, onUpdated }: Ed
               type="text"
               value={composer}
               onChange={(e) => setComposer(e.target.value)}
-              className="border rounded px-3 py-2"
+              className="border border-border bg-surface rounded px-3 py-2"
             />
           </label>
 
@@ -114,20 +114,20 @@ export default function EditSheetModal({ sheet, teamId, onClose, onUpdated }: Ed
                 value={key}
                 onChange={(e) => setKey(e.target.value)}
                 placeholder="예: G"
-                className="border rounded px-3 py-2"
+                className="border border-border bg-surface rounded px-3 py-2"
               />
             </label>
             {sheet.bpm && (
               <div className="flex flex-col gap-1 text-sm">
                 <span>BPM</span>
-                <p className="px-3 py-2 text-gray-500">{sheet.bpm}</p>
+                <p className="px-3 py-2 text-muted">{sheet.bpm}</p>
               </div>
             )}
           </div>
 
           <label className="flex flex-col gap-1 text-sm">
             파일 교체 (선택, PDF/PNG/JPG/WEBP)
-            <div className="border border-dashed rounded px-3 py-4 flex flex-col items-center gap-2 text-gray-500">
+            <div className="border border-dashed border-border rounded px-3 py-4 flex flex-col items-center gap-2 text-muted">
               <UploadCloud size={20} />
               <input
                 type="file"
@@ -145,26 +145,26 @@ export default function EditSheetModal({ sheet, teamId, onClose, onUpdated }: Ed
                 }}
                 className="text-xs"
               />
-              <p className="text-xs text-gray-600">
+              <p className="text-xs text-muted">
                 {file ? file.name : '선택하지 않으면 기존 파일이 유지됩니다.'}
               </p>
             </div>
           </label>
 
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
 
           <div className="flex gap-2 justify-end mt-2">
             <button
               type="button"
               onClick={onClose}
-              className="rounded px-4 py-2 text-sm border hover:bg-gray-50"
+              className="rounded px-4 py-2 text-sm border border-border hover:bg-surface-hover"
             >
               취소
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="bg-black text-white rounded px-4 py-2 text-sm disabled:opacity-50"
+              className="bg-accent text-accent-foreground rounded px-4 py-2 text-sm hover:bg-accent-hover disabled:opacity-50"
             >
               {loading ? '저장 중...' : '저장하기'}
             </button>

@@ -33,14 +33,14 @@ export default async function TeamPage({ params }: { params: { id: string } }) {
     <main className="min-h-screen p-8 max-w-2xl mx-auto flex flex-col gap-8">
       <Link
         href="/dashboard"
-        className="inline-flex items-center gap-1 text-sm text-gray-600 border rounded-lg px-3 py-2 w-fit hover:bg-gray-50 active:bg-gray-100"
+        className="inline-flex items-center gap-1 text-sm text-muted border border-border rounded-lg px-3 py-2 w-fit hover:bg-surface-hover active:bg-surface-hover"
       >
         ← 대시보드로
       </Link>
 
       <header>
-        <h1 className="text-2xl font-bold">{team.name}</h1>
-        {team.description && <p className="text-sm text-gray-500 mt-1">{team.description}</p>}
+        <h1 className="text-2xl font-bold text-foreground">{team.name}</h1>
+        {team.description && <p className="text-sm text-muted mt-1">{team.description}</p>}
       </header>
 
       <section>
@@ -49,9 +49,9 @@ export default async function TeamPage({ params }: { params: { id: string } }) {
           {(members ?? []).map((member, i) => {
             const profile = member.users as unknown as { display_name: string | null; email: string } | null;
             return (
-              <li key={i} className="border rounded px-4 py-3 flex justify-between">
+              <li key={i} className="border border-border rounded px-4 py-3 flex justify-between">
                 <span>{profile?.display_name || profile?.email}</span>
-                <span className="text-xs text-gray-500">{member.role}</span>
+                <span className="text-xs text-muted">{member.role}</span>
               </li>
             );
           })}

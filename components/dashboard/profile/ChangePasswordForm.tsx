@@ -79,7 +79,7 @@ export default function ChangePasswordForm({ email }: ChangePasswordFormProps) {
           required
           value={currentPassword}
           onChange={(e) => setCurrentPassword(e.target.value)}
-          className="border rounded px-3 py-2"
+          className="border border-border bg-surface rounded px-3 py-2"
         />
       </label>
 
@@ -92,14 +92,14 @@ export default function ChangePasswordForm({ email }: ChangePasswordFormProps) {
           maxLength={32}
           value={newPassword}
           onChange={(e) => setNewPassword(e.target.value)}
-          className="border rounded px-3 py-2"
+          className="border border-border bg-surface rounded px-3 py-2"
         />
         {newPassword.length === 0 ? (
-          <span className="text-xs text-gray-400">{PASSWORD_RULE_HINT}</span>
+          <span className="text-xs text-muted">{PASSWORD_RULE_HINT}</span>
         ) : liveNewPasswordError ? (
-          <span className="text-xs text-red-600">{liveNewPasswordError}</span>
+          <span className="text-xs text-red-600 dark:text-red-400">{liveNewPasswordError}</span>
         ) : (
-          <span className="text-xs text-green-600">사용할 수 있는 비밀번호입니다.</span>
+          <span className="text-xs text-green-600 dark:text-green-400">사용할 수 있는 비밀번호입니다.</span>
         )}
       </label>
 
@@ -112,19 +112,19 @@ export default function ChangePasswordForm({ email }: ChangePasswordFormProps) {
           maxLength={32}
           value={newPasswordConfirm}
           onChange={(e) => setNewPasswordConfirm(e.target.value)}
-          className="border rounded px-3 py-2"
+          className="border border-border bg-surface rounded px-3 py-2"
         />
-        {confirmMismatch && <span className="text-xs text-red-600">비밀번호가 일치하지 않습니다.</span>}
-        {confirmMatch && <span className="text-xs text-green-600">비밀번호가 일치합니다.</span>}
+        {confirmMismatch && <span className="text-xs text-red-600 dark:text-red-400">비밀번호가 일치하지 않습니다.</span>}
+        {confirmMatch && <span className="text-xs text-green-600 dark:text-green-400">비밀번호가 일치합니다.</span>}
       </label>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
-      {success && <p className="text-sm text-green-600">비밀번호가 변경되었습니다.</p>}
+      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+      {success && <p className="text-sm text-green-600 dark:text-green-400">비밀번호가 변경되었습니다.</p>}
 
       <button
         type="submit"
         disabled={loading}
-        className="self-start bg-black text-white rounded px-4 py-2 text-sm font-medium disabled:opacity-50"
+        className="self-start bg-accent text-accent-foreground hover:bg-accent-hover rounded px-4 py-2 text-sm font-medium disabled:opacity-50"
       >
         {loading ? '변경 중...' : '비밀번호 변경'}
       </button>

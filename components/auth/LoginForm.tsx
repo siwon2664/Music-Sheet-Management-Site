@@ -50,7 +50,7 @@ export default function LoginForm({ redirectTo = '/dashboard' }: LoginFormProps)
           required
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="border rounded px-3 py-2"
+          className="border border-border bg-surface rounded px-3 py-2"
         />
       </label>
 
@@ -61,16 +61,16 @@ export default function LoginForm({ redirectTo = '/dashboard' }: LoginFormProps)
           required
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="border rounded px-3 py-2"
+          className="border border-border bg-surface rounded px-3 py-2"
         />
       </label>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
 
       <button
         type="submit"
         disabled={loading}
-        className="bg-black text-white rounded px-4 py-2 disabled:opacity-50"
+        className="bg-accent text-accent-foreground hover:bg-accent-hover rounded px-4 py-2 disabled:opacity-50"
       >
         {loading ? '로그인 중...' : '로그인'}
       </button>

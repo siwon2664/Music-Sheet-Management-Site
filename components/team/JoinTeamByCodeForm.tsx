@@ -59,16 +59,16 @@ export default function JoinTeamByCodeForm() {
           value={code}
           onChange={(e) => setCode(e.target.value)}
           placeholder="팀장에게 받은 코드를 입력하세요"
-          className="border rounded px-3 py-2"
+          className="border border-border bg-surface rounded px-3 py-2"
         />
       </label>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
 
       <button
         type="submit"
         disabled={loading}
-        className="border rounded px-4 py-2 font-medium hover:bg-gray-50 disabled:opacity-50"
+        className="border border-border rounded px-4 py-2 font-medium hover:bg-surface-hover disabled:opacity-50"
       >
         {loading ? '참여 중...' : '팀 참여하기'}
       </button>

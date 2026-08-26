@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
-import { Eraser, Highlighter, Pencil, Trash2, Undo2, WifiOff } from 'lucide-react';
+import { Eraser, GripVertical, Hand, Highlighter, Pencil, Trash2, Undo2, WifiOff } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { getCachedDrawing } from '@/lib/offlineSheetCache';
 import type { Json } from '@/types/supabase';
@@ -14,7 +14,9 @@ interface Stroke {
   isHighlighter?: boolean;
 }
 
-type Tool = 'pen' | 'highlighter' | 'eraser';
+// 'pan'은 그리지 않고 화면을 손가락으로 넘기거나 확대/축소할 수 있게 캔버스가
+// 터치를 가로채지 않도록 하는 상태다(그리기 도구 없음 = 탐색 모드).
+type Tool = 'pen' | 'highlighter' | 'eraser' | 'pan';
 
 const ERASER_WIDTH_MULTIPLIER = 4;
 const HIGHLIGHTER_WIDTH_MULTIPLIER = 3;
@@ -30,22 +32,41 @@ interface DrawingLayerProps {
 const COLORS = ['#ef4444', '#f59e0b', '#22c55e', '#3b82f6', '#a855f7', '#111827'];
 const WIDTHS = [2, 4, 8];
 
+// 기본 위치(왼쪽 위)는 고정하되, 악보마다 여백 위치가 달라서 결국 뭔가는
+// 가릴 수 있으니 손잡이로 끌어서 옮길 수 있게 하고, 마지막 위치를
+// 기억해둔다. 기본값 자체는 바꾸지 않는다 — 이 위치가 이미 정해진 상태다.
+const TOOLBAR_POS_KEY = 'bandSetlist.drawingToolbarPos';
+const DEFAULT_TOOLBAR_POS = { x: 16, y: 16 }; // top-4 left-4 와 동일
+
+interface ToolbarPos {
+  x: number;
+  y: number;
+}
+
 export default function DrawingLayer({ sheetId, teamId, interactive = true }: DrawingLayerProps) {
   const supabase = createClient();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const toolbarRef = useRef<HTMLDivElement>(null);
   const rowIdRef = useRef<string | null>(null);
   const strokesRef = useRef<Stroke[]>([]);
   const activeStrokeRef = useRef<Stroke | null>(null);
   const activePointerIdRef = useRef<number | null>(null);
+  const dragRef = useRef<{ pointerId: number; startX: number; startY: number; startPosX: number; startPosY: number } | null>(
+    null
+  );
 
-  const [active, setActive] = useState(false);
-  const [tool, setTool] = useState<Tool>('pen');
+  // 팝업(색상/굵기 등 옵션)이 열려있는지와, 지금 어떤 도구가 선택돼 있는지는
+  // 서로 별개다 — 팝업을 닫아도 펜/지우개는 계속 그 도구로 동작해야 한다.
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [tool, setTool] = useState<Tool>('pan');
   const [color, setColor] = useState(COLORS[0]);
   const [penWidth, setPenWidth] = useState(WIDTHS[1]);
   const [strokeCount, setStrokeCount] = useState(0);
   const [saving, setSaving] = useState(false);
   const [offlineSaveFailed, setOfflineSaveFailed] = useState(false);
+  const [toolbarPos, setToolbarPos] = useState<ToolbarPos>(DEFAULT_TOOLBAR_POS);
+  const [dragging, setDragging] = useState(false);
 
   function redraw() {
     const canvas = canvasRef.current;
@@ -150,6 +171,84 @@ export default function DrawingLayer({ sheetId, teamId, interactive = true }: Dr
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // 지난번에 옮겨둔 도구 모음 위치를 기억해뒀다가 그대로 복원한다.
+  // 화면 크기가 그때와 다르면(기기가 바뀌었거나 회전했거나) 화면 밖으로
+  // 나가지 않도록 다시 안쪽으로 붙여준다.
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(TOOLBAR_POS_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved) as ToolbarPos;
+        setToolbarPos(clampToolbarPos(parsed.x, parsed.y));
+      }
+    } catch {
+      // 접근 불가 환경이면 그냥 기본 위치를 쓴다.
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    function handleResize() {
+      setToolbarPos((prev) => clampToolbarPos(prev.x, prev.y));
+    }
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // 도구 모음은 악보를 그리는 캔버스(containerRef, 악보 실제 크기와 정확히
+  // 일치해야 좌표 계산이 맞음)와 별개로 화면(viewport) 기준 fixed 위치로
+  // 띄운다. 이렇게 해야 악보 영역 바깥(모달의 어두운 배경, 검은 여백 등)
+  // 으로도 자유롭게 옮길 수 있다.
+  function clampToolbarPos(x: number, y: number): ToolbarPos {
+    const toolbar = toolbarRef.current;
+    const maxX = Math.max(0, window.innerWidth - (toolbar?.offsetWidth ?? 0));
+    const maxY = Math.max(0, window.innerHeight - (toolbar?.offsetHeight ?? 0));
+    return { x: Math.min(Math.max(0, x), maxX), y: Math.min(Math.max(0, y), maxY) };
+  }
+
+  function handleDragHandlePointerDown(e: ReactPointerEvent<HTMLDivElement>) {
+    e.stopPropagation();
+    dragRef.current = {
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      startY: e.clientY,
+      startPosX: toolbarPos.x,
+      startPosY: toolbarPos.y,
+    };
+    setDragging(true);
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      // 포인터 캡처 불가 환경이면 그냥 계속 진행한다.
+    }
+  }
+
+  function handleDragHandlePointerMove(e: ReactPointerEvent<HTMLDivElement>) {
+    const drag = dragRef.current;
+    if (!drag || e.pointerId !== drag.pointerId) return;
+    e.stopPropagation();
+    const dx = e.clientX - drag.startX;
+    const dy = e.clientY - drag.startY;
+    setToolbarPos(clampToolbarPos(drag.startPosX + dx, drag.startPosY + dy));
+  }
+
+  function handleDragHandlePointerUp(e: ReactPointerEvent<HTMLDivElement>) {
+    const drag = dragRef.current;
+    if (!drag || e.pointerId !== drag.pointerId) return;
+    e.stopPropagation();
+    dragRef.current = null;
+    setDragging(false);
+    setToolbarPos((prev) => {
+      try {
+        localStorage.setItem(TOOLBAR_POS_KEY, JSON.stringify(prev));
+      } catch {
+        // 저장 실패해도 이번 세션에서는 이미 옮겨진 위치가 반영돼 있다.
+      }
+      return prev;
+    });
+  }
+
   function getNormalizedPoint(e: ReactPointerEvent<HTMLCanvasElement>): [number, number] | null {
     const rect = e.currentTarget.getBoundingClientRect();
     if (rect.width === 0 || rect.height === 0) return null;
@@ -157,7 +256,7 @@ export default function DrawingLayer({ sheetId, teamId, interactive = true }: Dr
   }
 
   function handlePointerDown(e: ReactPointerEvent<HTMLCanvasElement>) {
-    if (!active) return;
+    if (tool === 'pan') return;
     // 애플펜슬로 필기하는 도중 손바닥이 화면에 닿아도 별도의 터치 포인터로
     // 필기를 방해하지 않도록, 이미 진행 중인 포인터가 있으면 새 입력은 무시한다.
     if (activePointerIdRef.current !== null) return;
@@ -187,7 +286,7 @@ export default function DrawingLayer({ sheetId, teamId, interactive = true }: Dr
   }
 
   function handlePointerMove(e: ReactPointerEvent<HTMLCanvasElement>) {
-    if (!active || !activeStrokeRef.current) return;
+    if (tool === 'pan' || !activeStrokeRef.current) return;
     if (e.pointerId !== activePointerIdRef.current) return;
     const point = getNormalizedPoint(e);
     if (!point) return;
@@ -272,6 +371,10 @@ export default function DrawingLayer({ sheetId, teamId, interactive = true }: Dr
     void persist([]);
   }
 
+  // 접혀있을 때도 지금 어떤 도구가 선택돼 있는지 한눈에 보이도록 아이콘을 바꿔준다.
+  const CurrentToolIcon =
+    tool === 'highlighter' ? Highlighter : tool === 'eraser' ? Eraser : tool === 'pan' ? Hand : Pencil;
+
   return (
     <div ref={containerRef} className="absolute inset-0 select-none [-webkit-touch-callout:none]">
       <canvas
@@ -282,30 +385,48 @@ export default function DrawingLayer({ sheetId, teamId, interactive = true }: Dr
         onPointerCancel={handlePointerUp}
         style={{ touchAction: 'none' }}
         className={`absolute inset-0 select-none [-webkit-touch-callout:none] ${
-          active && interactive ? 'cursor-crosshair' : 'pointer-events-none'
+          tool !== 'pan' && interactive ? 'cursor-crosshair' : 'pointer-events-none'
         }`}
       />
 
       {interactive && (
       <div
+        ref={toolbarRef}
         onClick={(e) => e.stopPropagation()}
-        className="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-black/80 rounded-full px-3 py-2 flex-wrap justify-center max-w-[95%]"
+        style={{ left: toolbarPos.x, top: toolbarPos.y }}
+        className={`fixed z-[60] flex flex-col gap-1.5 bg-black/80 rounded-2xl p-2 w-44 max-h-[75%] overflow-y-auto ${
+          dragging ? 'opacity-80' : ''
+        }`}
       >
-        <button
-          type="button"
-          onClick={() => setActive((prev) => !prev)}
-          className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
-            active ? 'bg-white text-black' : 'text-white hover:bg-white/20'
-          }`}
-          aria-label="드로잉 모드"
-        >
-          <Pencil size={16} />
-        </button>
+        <div className="flex items-center justify-between gap-1">
+          <button
+            type="button"
+            onClick={() => setMenuOpen((prev) => !prev)}
+            className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
+              menuOpen ? 'bg-white text-black' : 'text-white hover:bg-white/20'
+            }`}
+            aria-label="그리기 옵션 열기/닫기"
+          >
+            <CurrentToolIcon size={16} />
+          </button>
 
-        {active && (
-          <>
-            <div className="w-px h-5 bg-white/20 shrink-0" />
+          <div
+            onPointerDown={handleDragHandlePointerDown}
+            onPointerMove={handleDragHandlePointerMove}
+            onPointerUp={handleDragHandlePointerUp}
+            onPointerCancel={handleDragHandlePointerUp}
+            style={{ touchAction: 'none' }}
+            className={`w-8 h-8 rounded-full flex items-center justify-center cursor-move shrink-0 ${
+              dragging ? 'bg-white/20 text-white' : 'text-white/50'
+            }`}
+            aria-label="도구 모음 위치 이동 (끌어서 옮기기)"
+          >
+            <GripVertical size={16} />
+          </div>
+        </div>
 
+        {menuOpen && (
+          <div className="flex flex-wrap items-center gap-1.5 justify-center">
             <button
               type="button"
               onClick={() => setTool('pen')}
@@ -339,9 +460,21 @@ export default function DrawingLayer({ sheetId, teamId, interactive = true }: Dr
               <Eraser size={16} />
             </button>
 
-            <div className="w-px h-5 bg-white/20 shrink-0" />
+            <button
+              type="button"
+              onClick={() => setTool('pan')}
+              className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
+                tool === 'pan' ? 'bg-white text-black' : 'text-white hover:bg-white/20'
+              }`}
+              aria-label="넘기기/확대 (그리지 않음)"
+              title="넘기기/확대 (그리지 않음)"
+            >
+              <Hand size={16} />
+            </button>
 
-            {tool !== 'eraser' && (
+            <div className="basis-full h-px bg-white/20" />
+
+            {tool !== 'eraser' && tool !== 'pan' && (
               <>
                 {COLORS.map((c) => (
                   <button
@@ -364,25 +497,29 @@ export default function DrawingLayer({ sheetId, teamId, interactive = true }: Dr
                   aria-label="사용자 지정 색상"
                 />
 
-                <div className="w-px h-5 bg-white/20 shrink-0" />
+                <div className="basis-full h-px bg-white/20" />
               </>
             )}
 
-            {WIDTHS.map((w) => (
-              <button
-                key={w}
-                type="button"
-                onClick={() => setPenWidth(w)}
-                className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
-                  penWidth === w ? 'bg-white/20' : ''
-                }`}
-                aria-label={`굵기 ${w}`}
-              >
-                <span className="rounded-full bg-white block" style={{ width: w + 2, height: w + 2 }} />
-              </button>
-            ))}
+            {tool !== 'pan' && (
+              <>
+                {WIDTHS.map((w) => (
+                  <button
+                    key={w}
+                    type="button"
+                    onClick={() => setPenWidth(w)}
+                    className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
+                      penWidth === w ? 'bg-white/20' : ''
+                    }`}
+                    aria-label={`굵기 ${w}`}
+                  >
+                    <span className="rounded-full bg-white block" style={{ width: w + 2, height: w + 2 }} />
+                  </button>
+                ))}
 
-            <div className="w-px h-5 bg-white/20 shrink-0" />
+                <div className="basis-full h-px bg-white/20" />
+              </>
+            )}
 
             <button
               type="button"
@@ -404,14 +541,14 @@ export default function DrawingLayer({ sheetId, teamId, interactive = true }: Dr
               <Trash2 size={16} />
             </button>
 
-            {saving && <span className="text-[10px] text-white/50 shrink-0">저장 중...</span>}
+            {saving && <span className="text-[10px] text-white/50 shrink-0 text-center leading-tight">저장 중...</span>}
             {!saving && offlineSaveFailed && (
-              <span className="flex items-center gap-1 text-[10px] text-amber-400 shrink-0">
+              <span className="flex flex-col items-center gap-1 text-[10px] text-amber-400 shrink-0 w-14 text-center leading-tight">
                 <WifiOff size={12} />
                 오프라인이라 저장 안 됨
               </span>
             )}
-          </>
+          </div>
         )}
       </div>
       )}

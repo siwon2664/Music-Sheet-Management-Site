@@ -183,7 +183,7 @@ export default function SignUpForm({ redirectTo = '/dashboard', termsText, priva
     return (
       <form onSubmit={handleVerifyCode} className="flex flex-col gap-4">
         <h2 className="text-lg font-semibold">이메일 인증</h2>
-        <p className="text-sm text-gray-500">
+        <p className="text-sm text-muted">
           <strong>{email}</strong>로 인증 코드를 보냈습니다. 메일함(스팸함 포함)에서 코드를 확인해주세요.
         </p>
 
@@ -197,17 +197,17 @@ export default function SignUpForm({ redirectTo = '/dashboard', termsText, priva
             value={code}
             onChange={(e) => setCode(e.target.value)}
             placeholder="6자리 코드"
-            className="border rounded px-3 py-2 tracking-widest"
+            className="border border-border bg-surface rounded px-3 py-2 tracking-widest"
           />
         </label>
 
-        {verifyError && <p className="text-sm text-red-600">{verifyError}</p>}
-        {message && <p className="text-sm text-green-600">{message}</p>}
+        {verifyError && <p className="text-sm text-red-600 dark:text-red-400">{verifyError}</p>}
+        {message && <p className="text-sm text-green-600 dark:text-green-400">{message}</p>}
 
         <button
           type="submit"
           disabled={verifyLoading}
-          className="bg-black text-white rounded px-4 py-2 disabled:opacity-50"
+          className="bg-accent text-accent-foreground hover:bg-accent-hover rounded px-4 py-2 disabled:opacity-50"
         >
           {verifyLoading ? '확인 중...' : '인증하기'}
         </button>
@@ -216,7 +216,7 @@ export default function SignUpForm({ redirectTo = '/dashboard', termsText, priva
           type="button"
           onClick={handleResendCode}
           disabled={resendLoading}
-          className="text-sm text-gray-500 underline disabled:opacity-50"
+          className="text-sm text-muted underline disabled:opacity-50"
         >
           {resendLoading ? '재전송 중...' : '코드 다시 받기'}
         </button>
@@ -240,7 +240,7 @@ export default function SignUpForm({ redirectTo = '/dashboard', termsText, priva
           value={displayName}
           onChange={(e) => setDisplayName(e.target.value)}
           placeholder="밴드에서 사용할 이름"
-          className="border rounded px-3 py-2"
+          className="border border-border bg-surface rounded px-3 py-2"
         />
       </label>
 
@@ -256,22 +256,22 @@ export default function SignUpForm({ redirectTo = '/dashboard', termsText, priva
               setEmailCheck('idle');
               setEmailCheckError(null);
             }}
-            className="border rounded px-3 py-2 flex-1"
+            className="border border-border bg-surface rounded px-3 py-2 flex-1"
           />
           <button
             type="button"
             onClick={handleCheckEmail}
             disabled={!email || emailCheck === 'checking'}
-            className="border rounded px-3 py-2 text-sm whitespace-nowrap hover:bg-gray-50 disabled:opacity-50"
+            className="border border-border rounded px-3 py-2 text-sm whitespace-nowrap hover:bg-surface-hover disabled:opacity-50"
           >
             {emailCheck === 'checking' ? '확인 중...' : '중복확인'}
           </button>
         </div>
-        {emailCheck === 'taken' && <span className="text-xs text-red-600">이미 사용중인 이메일입니다.</span>}
+        {emailCheck === 'taken' && <span className="text-xs text-red-600 dark:text-red-400">이미 사용중인 이메일입니다.</span>}
         {emailCheck === 'available' && (
-          <span className="text-xs text-green-600">사용 가능한 이메일입니다.</span>
+          <span className="text-xs text-green-600 dark:text-green-400">사용 가능한 이메일입니다.</span>
         )}
-        {emailCheckError && <span className="text-xs text-red-600">{emailCheckError}</span>}
+        {emailCheckError && <span className="text-xs text-red-600 dark:text-red-400">{emailCheckError}</span>}
       </label>
 
       <label className="flex flex-col gap-1 text-sm">
@@ -283,14 +283,14 @@ export default function SignUpForm({ redirectTo = '/dashboard', termsText, priva
           maxLength={32}
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="border rounded px-3 py-2"
+          className="border border-border bg-surface rounded px-3 py-2"
         />
         {password.length === 0 ? (
-          <span className="text-xs text-gray-400">{PASSWORD_RULE_HINT}</span>
+          <span className="text-xs text-muted">{PASSWORD_RULE_HINT}</span>
         ) : livePasswordError ? (
-          <span className="text-xs text-red-600">{livePasswordError}</span>
+          <span className="text-xs text-red-600 dark:text-red-400">{livePasswordError}</span>
         ) : (
-          <span className="text-xs text-green-600">사용할 수 있는 비밀번호입니다.</span>
+          <span className="text-xs text-green-600 dark:text-green-400">사용할 수 있는 비밀번호입니다.</span>
         )}
       </label>
 
@@ -303,21 +303,21 @@ export default function SignUpForm({ redirectTo = '/dashboard', termsText, priva
           maxLength={32}
           value={passwordConfirm}
           onChange={(e) => setPasswordConfirm(e.target.value)}
-          className="border rounded px-3 py-2"
+          className="border border-border bg-surface rounded px-3 py-2"
         />
         {passwordConfirmMismatch && (
-          <span className="text-xs text-red-600">비밀번호가 일치하지 않습니다.</span>
+          <span className="text-xs text-red-600 dark:text-red-400">비밀번호가 일치하지 않습니다.</span>
         )}
-        {passwordConfirmMatch && <span className="text-xs text-green-600">비밀번호가 일치합니다.</span>}
+        {passwordConfirmMatch && <span className="text-xs text-green-600 dark:text-green-400">비밀번호가 일치합니다.</span>}
       </label>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
-      {message && <p className="text-sm text-green-600">{message}</p>}
+      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+      {message && <p className="text-sm text-green-600 dark:text-green-400">{message}</p>}
 
       <button
         type="submit"
         disabled={loading}
-        className="bg-black text-white rounded px-4 py-2 disabled:opacity-50"
+        className="bg-accent text-accent-foreground hover:bg-accent-hover rounded px-4 py-2 disabled:opacity-50"
       >
         {loading ? '가입 처리 중...' : '회원가입'}
       </button>

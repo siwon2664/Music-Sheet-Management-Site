@@ -380,7 +380,7 @@ export default function SheetsLibraryClient({ teamId, teamName, role, initialShe
   }
 
   function renderSortIcon(key: SortKey) {
-    if (sortKey !== key) return <ArrowUpDown size={14} className="text-gray-300" />;
+    if (sortKey !== key) return <ArrowUpDown size={14} className="text-muted" />;
     return sortDirection === 'asc' ? <ArrowUp size={14} /> : <ArrowDown size={14} />;
   }
 
@@ -393,8 +393,8 @@ export default function SheetsLibraryClient({ teamId, teamName, role, initialShe
       onDrop={handleDrop}
     >
       {isDraggingOver && (
-        <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/5 border-2 border-dashed border-black rounded-lg pointer-events-none">
-          <div className="bg-white rounded-lg shadow-lg px-6 py-4 flex items-center gap-3">
+        <div className="absolute inset-0 z-40 flex items-center justify-center bg-accent/10 border-2 border-dashed border-accent rounded-lg pointer-events-none">
+          <div className="bg-surface text-foreground rounded-lg shadow-lg px-6 py-4 flex items-center gap-3">
             <UploadCloud size={20} />
             <span className="text-sm font-medium">여기에 파일을 놓아 새 악보 추가</span>
           </div>
@@ -402,7 +402,7 @@ export default function SheetsLibraryClient({ teamId, teamName, role, initialShe
       )}
 
       {bulkUploading && (
-        <div className="flex items-center gap-2 bg-gray-100 border rounded-lg px-4 py-3 text-sm">
+        <div className="flex items-center gap-2 bg-surface-hover border border-border rounded-lg px-4 py-3 text-sm text-foreground">
           <UploadCloud size={16} />
           업로드 중... ({bulkUploading.done}/{bulkUploading.total})
         </div>
@@ -410,13 +410,13 @@ export default function SheetsLibraryClient({ teamId, teamName, role, initialShe
 
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="relative flex-1 min-w-[220px] max-w-sm">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
           <input
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="제목 검색 (초성 검색 가능)"
-            className="w-full border rounded pl-9 pr-3 py-2 text-sm"
+            className="w-full bg-surface text-foreground border border-border rounded pl-9 pr-3 py-2 text-sm"
           />
         </div>
 
@@ -426,7 +426,7 @@ export default function SheetsLibraryClient({ teamId, teamName, role, initialShe
             onClick={() => setShowEditModal(true)}
             disabled={selectedSheets.length !== 1}
             title={selectedSheets.length !== 1 ? '악보 하나를 선택하면 정보를 수정할 수 있습니다.' : undefined}
-            className="flex items-center gap-2 text-sm font-medium border rounded px-4 py-2 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+            className="flex items-center gap-2 text-sm font-medium border border-border rounded px-4 py-2 hover:bg-surface-hover disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <Pencil size={16} />
             편집하기
@@ -436,7 +436,7 @@ export default function SheetsLibraryClient({ teamId, teamName, role, initialShe
             onClick={() => setShowUploadModal(true)}
             disabled={sheetLimitReached}
             title={sheetLimitReached ? SHEET_LIMIT_MESSAGE : undefined}
-            className="flex items-center gap-2 text-sm font-medium border rounded px-4 py-2 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+            className="flex items-center gap-2 text-sm font-medium border border-border rounded px-4 py-2 hover:bg-surface-hover disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <Plus size={16} />
             새 악보 추가{!sheetLimitExempt && ` (${sheets.length}/${MAX_SHEETS_PER_TEAM})`}
@@ -445,20 +445,20 @@ export default function SheetsLibraryClient({ teamId, teamName, role, initialShe
       </div>
 
       {selectedIds.size > 0 && (
-        <div className="flex items-center justify-between gap-3 bg-gray-100 border rounded-lg px-4 py-3">
+        <div className="flex items-center justify-between gap-3 bg-surface-hover border border-border rounded-lg px-4 py-3">
           <span className="text-sm font-medium">{selectedIds.size}개 선택됨</span>
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={() => setShowCreateSetlistModal(true)}
-              className="flex items-center gap-1.5 text-sm font-medium border rounded px-3 py-1.5 hover:bg-white"
+              className="flex items-center gap-1.5 text-sm font-medium border border-border rounded px-3 py-1.5 hover:bg-surface"
             >
               <CalendarPlus size={14} />이 곡들로 콘티 만들기
             </button>
             <button
               type="button"
               onClick={openDownloadModal}
-              className="flex items-center gap-1.5 text-sm font-medium border rounded px-3 py-1.5 hover:bg-white"
+              className="flex items-center gap-1.5 text-sm font-medium border border-border rounded px-3 py-1.5 hover:bg-surface"
             >
               <Download size={14} />
               다운로드
@@ -468,7 +468,7 @@ export default function SheetsLibraryClient({ teamId, teamName, role, initialShe
                 type="button"
                 onClick={handleDeleteSelected}
                 disabled={deleting}
-                className="flex items-center gap-1.5 text-sm font-medium border border-red-200 text-red-600 rounded px-3 py-1.5 hover:bg-red-50 disabled:opacity-50"
+                className="flex items-center gap-1.5 text-sm font-medium border border-red-300 dark:border-red-500/40 text-red-600 dark:text-red-400 rounded px-3 py-1.5 hover:bg-red-50 dark:hover:bg-red-500/10 disabled:opacity-50"
               >
                 <Trash2 size={14} />
                 {deleting ? '삭제 중...' : '선택 삭제'}
@@ -478,12 +478,12 @@ export default function SheetsLibraryClient({ teamId, teamName, role, initialShe
         </div>
       )}
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
 
-      <div className="bg-white border rounded-lg overflow-x-auto">
+      <div className="bg-surface border border-border rounded-lg overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b bg-gray-50 text-left text-gray-500">
+            <tr className="border-b border-border bg-surface-hover text-left text-muted">
               <th className="w-10 px-4 py-3">
                 <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} />
               </th>
@@ -491,7 +491,7 @@ export default function SheetsLibraryClient({ teamId, teamName, role, initialShe
                 <button
                   type="button"
                   onClick={() => toggleSort('title')}
-                  className="flex items-center gap-1 font-medium hover:text-gray-900"
+                  className="flex items-center gap-1 font-medium hover:text-foreground"
                 >
                   제목 {renderSortIcon('title')}
                 </button>
@@ -503,7 +503,7 @@ export default function SheetsLibraryClient({ teamId, teamName, role, initialShe
                 <button
                   type="button"
                   onClick={() => toggleSort('created_at')}
-                  className="flex items-center gap-1 font-medium hover:text-gray-900"
+                  className="flex items-center gap-1 font-medium hover:text-foreground"
                 >
                   등록일 {renderSortIcon('created_at')}
                 </button>
@@ -515,7 +515,7 @@ export default function SheetsLibraryClient({ teamId, teamName, role, initialShe
               <tr
                 key={sheet.id}
                 onClick={() => setPreviewIndex(index)}
-                className="border-b last:border-b-0 hover:bg-gray-50 cursor-pointer"
+                className="border-b border-border last:border-b-0 hover:bg-surface-hover cursor-pointer"
               >
                 <td className="px-4 py-3 align-top" onClick={(e) => e.stopPropagation()}>
                   <input
@@ -538,7 +538,7 @@ export default function SheetsLibraryClient({ teamId, teamName, role, initialShe
                           {sheet.tags.map((tag) => (
                             <span
                               key={tag}
-                              className="text-[10px] text-gray-500 bg-gray-100 rounded-full px-2 py-0.5"
+                              className="text-[10px] text-muted bg-surface-hover rounded-full px-2 py-0.5"
                             >
                               #{tag}
                             </span>
@@ -548,10 +548,10 @@ export default function SheetsLibraryClient({ teamId, teamName, role, initialShe
                     </div>
                   </div>
                 </td>
-                <td className="px-2 py-3 align-top text-gray-600">{sheet.composer ?? '-'}</td>
-                <td className="px-2 py-3 align-top text-gray-600">{sheet.key ?? '-'}</td>
-                <td className="px-2 py-3 align-top text-gray-600">{sheet.bpm ?? '-'}</td>
-                <td className="px-2 py-3 align-top text-gray-500">
+                <td className="px-2 py-3 align-top text-muted">{sheet.composer ?? '-'}</td>
+                <td className="px-2 py-3 align-top text-muted">{sheet.key ?? '-'}</td>
+                <td className="px-2 py-3 align-top text-muted">{sheet.bpm ?? '-'}</td>
+                <td className="px-2 py-3 align-top text-muted">
                   {new Date(sheet.created_at).toLocaleDateString('ko-KR')}
                 </td>
               </tr>
@@ -559,7 +559,7 @@ export default function SheetsLibraryClient({ teamId, teamName, role, initialShe
 
             {filteredSorted.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-10 text-center text-gray-400">
+                <td colSpan={6} className="px-4 py-10 text-center text-muted">
                   {sheets.length === 0 ? '등록된 악보가 없습니다.' : '검색 결과가 없습니다.'}
                 </td>
               </tr>
@@ -614,32 +614,32 @@ export default function SheetsLibraryClient({ teamId, teamName, role, initialShe
 
       {showDownloadModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="bg-white rounded-lg shadow-lg w-full max-w-sm p-6">
+          <div className="bg-surface text-foreground rounded-lg shadow-lg w-full max-w-sm p-6">
             {downloadMode === null ? (
               <>
                 <h2 className="text-lg font-semibold mb-2">다운로드 방식 선택</h2>
-                <p className="text-sm text-gray-500 mb-4">
+                <p className="text-sm text-muted mb-4">
                   선택한 악보 {selectedSheets.length}개를 어떻게 받을까요?
                 </p>
                 <div className="flex flex-col gap-2">
                   <button
                     type="button"
                     onClick={() => setDownloadMode('single')}
-                    className="bg-black text-white rounded px-4 py-2 text-sm font-medium"
+                    className="bg-accent text-accent-foreground rounded px-4 py-2 text-sm font-medium hover:bg-accent-hover"
                   >
                     하나의 파일로 합쳐서 받기
                   </button>
                   <button
                     type="button"
                     onClick={() => setDownloadMode('separate')}
-                    className="border rounded px-4 py-2 text-sm font-medium hover:bg-gray-50"
+                    className="border border-border rounded px-4 py-2 text-sm font-medium hover:bg-surface-hover"
                   >
                     개별 파일로 각각 받기
                   </button>
                   <button
                     type="button"
                     onClick={closeDownloadModal}
-                    className="text-sm text-gray-500 hover:text-gray-900 mt-1"
+                    className="text-sm text-muted hover:text-foreground mt-1"
                   >
                     취소
                   </button>
@@ -648,19 +648,19 @@ export default function SheetsLibraryClient({ teamId, teamName, role, initialShe
             ) : (
               <>
                 <h2 className="text-lg font-semibold mb-2">필기 포함 여부</h2>
-                <p className="text-sm text-gray-500 mb-4">
+                <p className="text-sm text-muted mb-4">
                   내가 그려둔 필기(마킹)를 악보에 포함해서 받을까요? 여백은 화면에 보이는 것처럼 잘라낸
                   크기로 저장됩니다.
                 </p>
 
-                {downloadError && <p className="text-sm text-red-600 mb-4">{downloadError}</p>}
+                {downloadError && <p className="text-sm text-red-600 dark:text-red-400 mb-4">{downloadError}</p>}
 
                 <div className="flex flex-col gap-2">
                   <button
                     type="button"
                     onClick={() => handleDownload(true)}
                     disabled={!!downloading}
-                    className="bg-black text-white rounded px-4 py-2 text-sm font-medium disabled:opacity-50"
+                    className="bg-accent text-accent-foreground rounded px-4 py-2 text-sm font-medium hover:bg-accent-hover disabled:opacity-50"
                   >
                     {downloading ? `만드는 중... (${downloading.done}/${downloading.total})` : '필기 포함해서 다운로드'}
                   </button>
@@ -668,7 +668,7 @@ export default function SheetsLibraryClient({ teamId, teamName, role, initialShe
                     type="button"
                     onClick={() => handleDownload(false)}
                     disabled={!!downloading}
-                    className="border rounded px-4 py-2 text-sm font-medium hover:bg-gray-50 disabled:opacity-50"
+                    className="border border-border rounded px-4 py-2 text-sm font-medium hover:bg-surface-hover disabled:opacity-50"
                   >
                     {downloading ? '만드는 중...' : '악보만 다운로드'}
                   </button>
@@ -676,7 +676,7 @@ export default function SheetsLibraryClient({ teamId, teamName, role, initialShe
                     type="button"
                     onClick={() => (selectedSheets.length > 1 ? setDownloadMode(null) : closeDownloadModal())}
                     disabled={!!downloading}
-                    className="text-sm text-gray-500 hover:text-gray-900 mt-1 disabled:opacity-50"
+                    className="text-sm text-muted hover:text-foreground mt-1 disabled:opacity-50"
                   >
                     {selectedSheets.length > 1 ? '이전' : '취소'}
                   </button>

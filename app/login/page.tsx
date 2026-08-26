@@ -10,20 +10,20 @@ export default function LoginPage({
   const redirectTo = searchParams.redirect || '/dashboard';
 
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center gap-8 p-8 bg-gray-50">
+    <main className="min-h-screen flex flex-col items-center justify-center gap-8 p-8 bg-background">
       <AuthBrandHeader />
 
-      <div className="w-full max-w-sm bg-white border rounded-lg shadow-sm p-6">
+      <div className="w-full max-w-sm bg-surface text-foreground border border-border rounded-lg shadow-sm p-6">
         {searchParams.confirmed && (
-          <p className="text-sm text-green-600 mb-4">회원가입이 완료되었습니다. 로그인해주세요.</p>
+          <p className="text-sm text-green-600 dark:text-green-400 mb-4">회원가입이 완료되었습니다. 로그인해주세요.</p>
         )}
         {searchParams.deleted && (
-          <p className="text-sm text-green-600 mb-4">탈퇴가 완료되었습니다. 그동안 이용해주셔서 감사합니다.</p>
+          <p className="text-sm text-green-600 dark:text-green-400 mb-4">탈퇴가 완료되었습니다. 그동안 이용해주셔서 감사합니다.</p>
         )}
         <LoginForm redirectTo={redirectTo} />
       </div>
 
-      <p className="text-sm text-gray-500">
+      <p className="text-sm text-muted">
         계정이 없으신가요?{' '}
         <Link href={`/signup?redirect=${encodeURIComponent(redirectTo)}`} className="underline">
           회원가입

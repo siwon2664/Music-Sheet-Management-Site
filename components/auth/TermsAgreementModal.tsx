@@ -97,15 +97,15 @@ export default function TermsAgreementModal({
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-lg shadow-lg w-full max-w-lg max-h-[85vh] flex flex-col">
-        <div className="p-4 border-b">
+      <div className="bg-surface text-foreground rounded-lg shadow-lg w-full max-w-lg max-h-[85vh] flex flex-col">
+        <div className="p-4 border-b border-border">
           <h2 className="text-lg font-semibold">약관 동의</h2>
           <div className="flex gap-2 mt-3">
             <button
               type="button"
               onClick={() => setTab('terms')}
               className={`text-sm px-3 py-1.5 rounded ${
-                tab === 'terms' ? 'bg-black text-white' : 'bg-gray-100 text-gray-600'
+                tab === 'terms' ? 'bg-accent text-accent-foreground' : 'bg-surface-hover text-muted'
               }`}
             >
               이용약관
@@ -114,7 +114,7 @@ export default function TermsAgreementModal({
               type="button"
               onClick={() => setTab('privacy')}
               className={`text-sm px-3 py-1.5 rounded ${
-                tab === 'privacy' ? 'bg-black text-white' : 'bg-gray-100 text-gray-600'
+                tab === 'privacy' ? 'bg-accent text-accent-foreground' : 'bg-surface-hover text-muted'
               }`}
             >
               개인정보처리방침
@@ -126,7 +126,7 @@ export default function TermsAgreementModal({
           {renderLegalText(tab === 'terms' ? termsText : privacyText)}
         </div>
 
-        <div className="p-4 border-t flex flex-col gap-2">
+        <div className="p-4 border-t border-border flex flex-col gap-2">
           <label className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"
@@ -149,7 +149,7 @@ export default function TermsAgreementModal({
               type="button"
               onClick={onCancel}
               disabled={loading}
-              className="flex-1 border rounded px-4 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
+              className="flex-1 border border-border rounded px-4 py-2 text-sm hover:bg-surface-hover disabled:opacity-50"
             >
               취소
             </button>
@@ -157,7 +157,7 @@ export default function TermsAgreementModal({
               type="button"
               onClick={onAgree}
               disabled={!canAgree || loading}
-              className="flex-1 bg-black text-white rounded px-4 py-2 text-sm disabled:opacity-50"
+              className="flex-1 bg-accent text-accent-foreground hover:bg-accent-hover rounded px-4 py-2 text-sm disabled:opacity-50"
             >
               {loading ? '처리 중...' : '동의하고 계속하기'}
             </button>
