@@ -1,21 +1,24 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type TouchEvent as ReactTouchEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { Download, MoreVertical, Play, Trash2 } from 'lucide-react';
 import {
   DndContext,
   DragOverlay,
   closestCenter,
-  PointerSensor,
+  MouseSensor,
+  TouchSensor,
   KeyboardSensor,
   useSensor,
   useSensors,
   type DragEndEvent,
   type DragOverEvent,
   type DragStartEvent,
+  type MouseSensorOptions,
+  type TouchSensorOptions,
 } from '@dnd-kit/core';
-import { sortableKeyboardCoordinates } from '@dnd-kit/sortable';
+import { arrayMove, sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 import { createClient } from '@/lib/supabase/client';
 import { exportSetlistToPdf } from '@/lib/exportSetlistPdf';
 import SheetLibraryPanel, { LIBRARY_DROP_ID, type LibrarySheet } from './SheetLibraryPanel';
@@ -33,6 +36,47 @@ interface SetlistEditorProps {
 }
 
 let tempIdCounter = 0;
+
+// dnd-kit 기본 센서는 어느 엘리먼트에서 눌렀든 무조건 드래그를 시도한다 — 버튼이나
+// 입력창 위에서도 예외를 두지 않는다. 콘티 카드 전체에 드래그 리스너를 걸면서도
+// 버튼·입력창(및 data-no-dnd로 표시한 영역, 예: 곡 제목·송폼 마커 편집기)에서는
+// 절대 드래그가 시작되지 않게 하려고, 실제로 누른 엘리먼트를 보고 걸러내는 센서를
+// 직접 만든다. 반대로 data-dnd-handle이 붙은 엘리먼트(그립 아이콘)는 <button>이어도
+// 예외적으로 허용해서 전용 손잡이로 계속 쓸 수 있게 한다.
+function isDndBlockedTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return false;
+  if (target.closest('[data-dnd-handle]')) return false;
+  return !!target.closest('button, input, select, textarea, a, label, [data-no-dnd]');
+}
+
+// 마우스: 기존과 동일하게 약간만 움직여도(8px) 바로 드래그로 인식한다 — 클릭과
+// 구분하기 위한 최소한의 여유일 뿐, 마우스에는 롱프레스 개념이 필요 없다.
+class FilteredMouseSensor extends MouseSensor {
+  static activators = [
+    {
+      eventName: 'onMouseDown' as const,
+      handler: (event: ReactMouseEvent, options: MouseSensorOptions) => {
+        if (isDndBlockedTarget(event.nativeEvent.target)) return false;
+        return MouseSensor.activators[0].handler(event, options);
+      },
+    },
+  ];
+}
+
+// 터치: 일정 거리 안에서 일정 시간(delay) 이상 눌러야("길게 누르면") 드래그가
+// 시작된다. delay가 지나기 전에 손가락이 tolerance 이상 움직이면 스크롤로 보고
+// 드래그 활성화를 취소하므로, 짧게 훑어 스크롤하는 동작과 자연스럽게 구분된다.
+class FilteredTouchSensor extends TouchSensor {
+  static activators = [
+    {
+      eventName: 'onTouchStart' as const,
+      handler: (event: ReactTouchEvent, options: TouchSensorOptions) => {
+        if (isDndBlockedTarget(event.nativeEvent.target)) return false;
+        return TouchSensor.activators[0].handler(event, options);
+      },
+    },
+  ];
+}
 
 export default function SetlistEditor({
   setlistId,
@@ -59,8 +103,8 @@ export default function SetlistEditor({
   const [downloadError, setDownloadError] = useState<string | null>(null);
 
   // 라이브러리 카드 드래그(악보 추가)와 콘티 목록 내부 순서 변경(dnd-kit sortable)을
-  // 하나의 DndContext에서 함께 처리한다 — PointerSensor라 마우스/터치 모두 동일하게
-  // 동작해서, 모바일에서도 라이브러리 카드를 끌어 콘티 목록에 추가할 수 있다.
+  // 하나의 DndContext에서 함께 처리한다 — 마우스/터치 센서를 따로 둬서, 모바일에서도
+  // 라이브러리 카드나 콘티 카드를 길게 눌러 끌 수 있다(아래 sensors 참고).
   const [draggingSheet, setDraggingSheet] = useState<LibrarySheet | null>(null);
   // 콘티 목록 안의 곡을 끄는 중일 때 — DragOverlay로 반투명 미리보기 카드를 띄워서
   // 커서를 따라다니게 한다. (DragOverlay가 있으면 원본 카드 자체의 이동은 dnd-kit이
@@ -73,7 +117,8 @@ export default function SetlistEditor({
   const [deleteTarget, setDeleteTarget] = useState(false);
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(FilteredMouseSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(FilteredTouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
@@ -133,13 +178,10 @@ export default function SetlistEditor({
   function moveItem(fromIndex: number, toIndex: number) {
     if (fromIndex === toIndex) return;
     setSaved(false);
-    setItems((prev) => {
-      const next = [...prev];
-      const [moved] = next.splice(fromIndex, 1);
-      const adjustedTo = fromIndex < toIndex ? toIndex - 1 : toIndex;
-      next.splice(adjustedTo, 0, moved);
-      return next;
-    });
+    // dnd-kit의 arrayMove를 그대로 쓴다 — 직접 splice로 구현했을 때, 앞→뒤로 옮기는
+    // 경우(예: 1번을 2번 자리로) toIndex를 한 칸 당겨 계산하는 실수가 있어서 바로
+    // 다음 자리로 옮기는 게 통째로 씹히는(제자리로 되돌아가는) 버그가 있었다.
+    setItems((prev) => arrayMove(prev, fromIndex, toIndex));
   }
 
   function handleDragStart(event: DragStartEvent) {
@@ -166,21 +208,7 @@ export default function SetlistEditor({
     }
 
     setDeleteTarget(false);
-
-    // 라이브러리 카드를 다시 라이브러리 쪽으로(또는 아무 데도 아닌 곳으로) 끌고 가는
-    // 중에는 콘티 목록에 삽입선을 보여주지 않는다 — 여기서 놓아도 아무 일도 안 일어난다.
-    if (!over || over.id === LIBRARY_DROP_ID || isPointOverLibrary(event)) {
-      setDragOverIndex(null);
-      return;
-    }
-
-    if (over.id === SETLIST_DROP_END_ID) {
-      setDragOverIndex(items.length);
-      return;
-    }
-
-    const index = items.findIndex((item) => item.id === over.id);
-    setDragOverIndex(index === -1 ? items.length : index);
+    setDragOverIndex(resolveLibraryInsertIndex(event));
   }
 
   function handleDragEnd(event: DragEndEvent) {
@@ -199,10 +227,9 @@ export default function SetlistEditor({
     if (data?.type === 'library' && data.sheet) {
       // 라이브러리 카드를 다시 라이브러리 쪽에 놓으면 아무 일도 하지 않는다.
       if (droppedOnLibrary) return;
-      if (!over) return;
-      const index =
-        over.id === SETLIST_DROP_END_ID ? items.length : items.findIndex((item) => item.id === over.id);
-      addSheet(data.sheet, index === -1 ? items.length : index);
+      const index = resolveLibraryInsertIndex(event);
+      if (index === null) return;
+      addSheet(data.sheet, index);
       return;
     }
 
@@ -224,24 +251,81 @@ export default function SetlistEditor({
     moveItem(fromIndex, toIndex);
   }
 
-  // over가 정확히 안 잡혀도, 실제로 포인터가 있는 화면 좌표 아래에 라이브러리 패널이
-  // 있으면 "라이브러리 위에 있다"고 판정한다. dnd-kit의 사각형 충돌 판정이 다른 큰
-  // 드롭 영역(콘티 목록 컨테이너 등)과 애매하게 겹칠 때를 보완하는 용도.
-  function isPointOverLibrary(event: { activatorEvent: Event; delta: { x: number; y: number } }): boolean {
+  // activatorEvent(드래그 시작 시점의 원래 이벤트)의 좌표에 delta(시작 이후 누적 이동량)를
+  // 더해서 "지금 포인터가 화면 어디에 있는지"를 구한다. dnd-kit이 매 프레임 좌표를 따로
+  // 넘겨주지 않아서, DragOverEvent/DragEndEvent 어디서든 이 방식으로 재구성해 쓴다.
+  function getPointerPosition(event: {
+    activatorEvent: Event;
+    delta: { x: number; y: number };
+  }): { x: number; y: number } | null {
     const native = event.activatorEvent;
     if (!(native instanceof MouseEvent) && !(native instanceof PointerEvent) && !(native instanceof TouchEvent)) {
-      return false;
+      return null;
     }
     const point =
       native instanceof TouchEvent
         ? native.touches[0] ?? native.changedTouches[0]
         : (native as MouseEvent);
-    if (!point) return false;
+    if (!point) return null;
 
-    const x = point.clientX + event.delta.x;
-    const y = point.clientY + event.delta.y;
-    const el = document.elementFromPoint(x, y);
+    return { x: point.clientX + event.delta.x, y: point.clientY + event.delta.y };
+  }
+
+  // over가 정확히 안 잡혀도, 실제로 포인터가 있는 화면 좌표 아래에 라이브러리 패널이
+  // 있으면 "라이브러리 위에 있다"고 판정한다. dnd-kit의 사각형 충돌 판정이 다른 큰
+  // 드롭 영역(콘티 목록 컨테이너 등)과 애매하게 겹칠 때를 보완하는 용도.
+  function isPointOverLibrary(event: { activatorEvent: Event; delta: { x: number; y: number } }): boolean {
+    const point = getPointerPosition(event);
+    if (!point) return false;
+    const el = document.elementFromPoint(point.x, point.y);
     return !!el?.closest(`[data-drop-zone="${LIBRARY_DROP_ID}"]`);
+  }
+
+  // 라이브러리 카드를 콘티 목록 위로 끌고 있을 때, 지금 놓으면 몇 번째 자리에 들어갈지
+  // 계산한다. "지금 어떤 곡 위에 있는가"만 보면 그 곡 앞에만 끼워 넣을 수 있다 —
+  // closestCenter 특성상 콘티 목록 전체를 감싸는 "맨 끝" 드롭 영역(SETLIST_DROP_END_ID)은
+  // 목록이 꽉 차 있으면 그 중심이 항상 어느 항목보다 멀어서 사실상 선택될 일이 없고,
+  // 결과적으로 마지막 곡 아래쪽으로 끌어도 "마지막 곡 앞"으로만 끼워지고 맨 끝에는
+  // 절대 추가되지 않는 문제가 있었다. 그래서 지금 놓인 곡 카드의 위쪽 절반인지
+  // 아래쪽 절반인지까지 포인터 좌표로 확인해서, 아래쪽 절반이면 그 곡 "다음" 자리로
+  // 끼워 넣는다.
+  //
+  // over가 콘티 목록의 실제 항목(또는 맨 끝 영역)으로 잡혔다면 그 판정을 최우선으로
+  // 믿는다 — isPointOverLibrary(화면 좌표 보정)를 먼저 물어보면, 마지막 곡보다
+  // 한참 아래(두 패널 사이 여백, 라이브러리 패널 맨 위쪽 언저리)까지 끌었을 때
+  // 좌표상 라이브러리 쪽에 살짝 걸쳤다는 이유로 유효한 "맨 끝에 추가" 판정을 통째로
+  // 취소해버리는 문제가 있었다. isPointOverLibrary는 over가 콘티 쪽 항목으로 전혀
+  // 안 잡혔을 때(라이브러리 카드 위, 또는 애매한 곳)에만 최후 확인용으로 쓴다.
+  function resolveLibraryInsertIndex(event: {
+    over: { id: string | number; rect: { top: number; height: number } } | null;
+    activatorEvent: Event;
+    delta: { x: number; y: number };
+  }): number | null {
+    const { over } = event;
+
+    if (over) {
+      if (over.id === SETLIST_DROP_END_ID) {
+        return items.length;
+      }
+
+      const index = items.findIndex((item) => item.id === over.id);
+      if (index !== -1) {
+        const point = getPointerPosition(event);
+        if (point) {
+          const midpointY = over.rect.top + over.rect.height / 2;
+          if (point.y > midpointY) return index + 1;
+        }
+        return index;
+      }
+    }
+
+    // 여기까지 왔으면 over가 콘티 목록 항목이 아니다 — 진짜로 라이브러리 위인지
+    // 화면 좌표로 한 번 더 확인해서, 맞으면 취소하고 아니면 일단 맨 끝에 추가한다.
+    if (!over || over.id === LIBRARY_DROP_ID || isPointOverLibrary(event)) {
+      return null;
+    }
+
+    return items.length;
   }
 
   // 악보의 bpm은 콘티 소속이 아니라 악보 자체의 값이라, 콘티를 저장하기 전이라도

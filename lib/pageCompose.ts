@@ -74,6 +74,41 @@ export function revokePagePreview(page: PendingPage): void {
   if (page.kind === 'image') URL.revokeObjectURL(page.thumbnailUrl);
 }
 
+const LIBRARY_THUMB_MAX_EDGE = 240;
+const LIBRARY_THUMB_JPEG_QUALITY = 0.7;
+
+// 악보 라이브러리 목록에 쓸 PDF 첫 페이지 썸네일을 만든다. 위 expandFileToPages의
+// 페이지별 미리보기 렌더링과 같은 pdfjs 경로를 쓰되, 목록 썸네일 크기/화질
+// (createThumbnailImage와 동일한 240px · 0.7)에 맞춰 별도 jpg 파일로 뽑아낸다.
+// 렌더링에 실패해도(손상된 PDF 등) 업로드 자체는 막으면 안 되므로 null만 돌려준다.
+export async function createPdfThumbnailImage(file: File): Promise<File | null> {
+  try {
+    const pdfjsLib = await loadPdfjs();
+    const pdf = await pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
+    const page = await pdf.getPage(1);
+    const unscaledViewport = page.getViewport({ scale: 1 });
+    const scale = LIBRARY_THUMB_MAX_EDGE / Math.max(unscaledViewport.width, unscaledViewport.height);
+    const viewport = page.getViewport({ scale });
+
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(viewport.width));
+    canvas.height = Math.max(1, Math.round(viewport.height));
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+
+    await page.render({ canvasContext: ctx, viewport }).promise;
+
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, 'image/jpeg', LIBRARY_THUMB_JPEG_QUALITY)
+    );
+    if (!blob) return null;
+
+    return new File([blob], 'thumb.jpg', { type: 'image/jpeg' });
+  } catch {
+    return null;
+  }
+}
+
 async function rasterizeImageToJpeg(file: File): Promise<{ bytes: Uint8Array; width: number; height: number }> {
   const bitmap = await createImageBitmap(file);
   try {

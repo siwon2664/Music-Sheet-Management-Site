@@ -9,13 +9,16 @@ interface PdfPageViewerProps {
   // 오프라인 캐시 폴백에 쓰인다 — 둘 다 있어야 캐시를 조회할 수 있다.
   sheetId?: string;
   updatedAt?: string;
+  // 연주 모드에서 모든 곡을 미리 렌더링해둘 때, 이 곡의 렌더링이 (성공이든
+  // 실패든) 끝났음을 상위 컴포넌트에 알리기 위한 콜백.
+  onReady?: () => void;
 }
 
 // 브라우저 내장 PDF 뷰어(iframe)는 파일마다 원본 페이지 크기에 따라 배율이 제각각이라
 // 악보마다 화면에 보이는 크기가 들쭉날쭉했다. pdf.js로 직접 캔버스에 그려서
 // 이미지 악보(object-contain)와 동일하게, 페이지 전체가 잘리지 않고 컨테이너
 // 안에 다 들어오도록(가로/세로 둘 다 맞춰서) 렌더링한다.
-export default function PdfPageViewer({ src, sheetId, updatedAt }: PdfPageViewerProps) {
+export default function PdfPageViewer({ src, sheetId, updatedAt, onReady }: PdfPageViewerProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const pagesRef = useRef<HTMLDivElement>(null);
   const renderIdRef = useRef(0);
@@ -136,7 +139,10 @@ export default function PdfPageViewer({ src, sheetId, updatedAt }: PdfPageViewer
           pagesContainer.replaceChildren();
         }
       } finally {
-        if (renderIdRef.current === myRenderId) setLoading(false);
+        if (renderIdRef.current === myRenderId) {
+          setLoading(false);
+          onReady?.();
+        }
       }
     }
 

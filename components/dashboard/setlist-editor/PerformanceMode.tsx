@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { Check } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { isPdfFile } from '@/lib/storage';
-import { cacheDrawing, cacheSheetFile, isSheetCached } from '@/lib/offlineSheetCache';
+import { cacheDrawing, cacheSheetFile, getCachedSheetFile } from '@/lib/offlineSheetCache';
 import PdfPageViewer from '@/components/sheets/PdfPageViewer';
 import DrawingLayer from '@/components/sheets/DrawingLayer';
 import ImageDrawingStage from '@/components/sheets/ImageDrawingStage';
@@ -21,17 +21,19 @@ export default function PerformanceMode({ items, teamId, initialIndex = 0, onClo
   const supabase = createClient();
 
   const [index, setIndex] = useState(initialIndex);
-  const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
-  const [preloading, setPreloading] = useState(true);
-  const [preloadError, setPreloadError] = useState<string | null>(null);
-  // 오프라인에서도 계속 볼 수 있게 파일이 로컬에 저장된 곡의 sheetId 모음.
-  const [cachedSheetIds, setCachedSheetIds] = useState<Set<string>>(new Set());
-  const [cacheChecked, setCacheChecked] = useState(false);
+  // 곡별로 로컬(blob) URL을 미리 받아둔다 — 연주 중 곡 전환은 이 로컬 URL만 쓰고
+  // 네트워크를 다시 타지 않으므로 딜레이가 없다.
+  const [localUrls, setLocalUrls] = useState<Record<string, string>>({});
+  const [itemErrors, setItemErrors] = useState<Record<string, string>>({});
+  // 파일을 받은 것만으로는 부족하다 — PDF는 캔버스에 실제로 그려질 때까지도
+  // 시간이 걸리므로, 각 곡의 뷰어가 "다 그렸다"고 알려온 것까지 준비 완료로 친다.
+  const [readyIds, setReadyIds] = useState<Set<string>>(new Set());
 
   const item = items[index];
   const effectiveKey = item ? item.transposedKey ?? item.originalKey : null;
 
   const dragStartRef = useRef<{ x: number; y: number } | null>(null);
+  const objectUrlsRef = useRef<Set<string>>(new Set());
 
   function goPrev() {
     setIndex((prev) => Math.max(0, prev - 1));
@@ -122,89 +124,98 @@ export default function PerformanceMode({ items, teamId, initialIndex = 0, onClo
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items.length]);
 
-  // 이 콘티의 곡 중 파일이 이미 로컬에 저장되어 있는 곡이 무엇인지 미리
-  // 확인해둔다. signed URL 발급이 실패하거나 오프라인이어도 이 정보로 캐시
-  // 폴백이 가능한지 바로 판단할 수 있다.
-  useEffect(() => {
-    let cancelled = false;
-
-    async function checkExisting() {
-      const entries = await Promise.all(
-        items.map(async (it) => [it.sheetId, await isSheetCached(it.sheetId, it.updatedAt)] as const)
-      );
-      if (cancelled) return;
-      setCachedSheetIds(new Set(entries.filter(([, cached]) => cached).map(([sheetId]) => sheetId)));
-      setCacheChecked(true);
-    }
-
-    checkExisting();
-
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  const markReady = useCallback((id: string) => {
+    setReadyIds((prev) => {
+      if (prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
   }, []);
 
-  // 곡을 넘길 때마다 signed URL을 새로 발급받으면 그때마다 네트워크 왕복이 생겨
-  // 딜레이가 느껴진다. 연주 모드에 들어가는 시점에 콘티 전체의 signed URL을
-  // 한 번에 받아두고, 곡 전환은 이미 받아둔 URL을 그냥 꺼내 쓰기만 한다.
+  // 연주 모드 시작 시점에 콘티 전체를 한 번에 준비한다: signed URL을 일괄 발급받고,
+  // 곡마다 실제 파일까지 미리 내려받아 로컬(blob) URL로 바꿔둔다. 곡 전환 때마다
+  // 매번 새로 네트워크를 타면(또는 PDF를 처음 열 때 디코딩하면) 그때 딜레이가
+  // 느껴지므로, 그 비용을 전부 "시작" 시점(로딩 화면)으로 앞당겨서 치르고
+  // 연주 중에는 이미 받아둔 로컬 URL만 쓰게 한다.
   useEffect(() => {
     let cancelled = false;
 
     async function preloadAll() {
-      setPreloading(true);
-      setPreloadError(null);
-
-      const validItems = items.filter(
+      const targets = items.filter(
         (it): it is SetlistItem & { fileUrl: string } => !!it.fileUrl
       );
+      if (targets.length === 0) return;
 
-      if (validItems.length === 0) {
-        if (!cancelled) setPreloading(false);
-        return;
-      }
+      let signedUrlMap: Record<string, string> = {};
 
-      // 오프라인이면 signed URL 발급 자체가 의미 없으니 네트워크 시도를
-      // 건너뛰고, 이미 캐시된 곡으로만 진행할 수 있게 한다.
-      if (!navigator.onLine) {
-        if (!cancelled) {
-          setPreloadError('오프라인 상태입니다. 이전에 열어본 곡만 볼 수 있습니다.');
-          setPreloading(false);
+      // 오프라인이면 signed URL 발급 자체가 의미 없으니 건너뛰고 곧바로
+      // 곡마다 캐시 폴백을 시도한다.
+      if (navigator.onLine) {
+        try {
+          const { data } = await supabase.storage
+            .from('sheets')
+            .createSignedUrls(
+              targets.map((it) => it.fileUrl),
+              60 * 60
+            );
+          if (!cancelled && data) {
+            targets.forEach((it, i) => {
+              const url = data[i]?.signedUrl;
+              if (url) signedUrlMap[it.id] = url;
+            });
+          }
+        } catch {
+          // 무시 — 아래에서 곡별 캐시 폴백으로 처리된다.
         }
-        return;
       }
 
-      try {
-        const { data, error: signError } = await supabase.storage
-          .from('sheets')
-          .createSignedUrls(
-            validItems.map((it) => it.fileUrl),
-            60 * 60
-          );
+      if (cancelled) return;
 
-        if (cancelled) return;
+      await Promise.all(
+        targets.map(async (it) => {
+          let blob: Blob | null = null;
+          const url = signedUrlMap[it.id];
 
-        if (signError || !data) {
-          setPreloadError(signError?.message ?? '악보를 불러오지 못했습니다.');
-          setPreloading(false);
-          return;
-        }
+          if (url) {
+            try {
+              const res = await fetch(url);
+              if (res.ok) blob = await res.blob();
+            } catch {
+              blob = null;
+            }
+          }
 
-        const map: Record<string, string> = {};
-        validItems.forEach((it, i) => {
-          const url = data[i]?.signedUrl;
-          if (url) map[it.id] = url;
-        });
+          if (cancelled) return;
 
-        setSignedUrls(map);
-        setPreloading(false);
-      } catch (err) {
-        // 온라인으로 보이지만 실제 요청이 네트워크 오류로 실패한 경우(캡티브
-        // 포털 등)도 여기서 잡아 캐시 폴백이 가능하도록 한다.
-        if (cancelled) return;
-        setPreloadError(err instanceof Error ? err.message : '네트워크 오류');
-        setPreloading(false);
-      }
+          if (blob) {
+            // 온라인 연습 때 콘티를 한 번 훑어보면, 공연 중 네트워크가 끊겨도
+            // 이 저장된 파일로 계속 볼 수 있도록 영구 저장해둔다.
+            cacheSheetFile(it.sheetId, it.updatedAt, blob).catch(() => {});
+          } else {
+            blob = await getCachedSheetFile(it.sheetId, it.updatedAt);
+          }
+
+          if (cancelled) return;
+
+          if (blob) {
+            const objectUrl = URL.createObjectURL(blob);
+            objectUrlsRef.current.add(objectUrl);
+            setLocalUrls((prev) => ({ ...prev, [it.id]: objectUrl }));
+          } else {
+            setItemErrors((prev) => ({
+              ...prev,
+              [it.id]: navigator.onLine
+                ? '파일을 불러오지 못했습니다.'
+                : '오프라인 상태이며 저장된 캐시가 없습니다.',
+            }));
+            // 파일을 못 받았으면 렌더링할 뷰어 자체가 마운트되지 않으므로,
+            // 이 곡은 여기서 바로 "준비 완료(실패)"로 표시해야 전체 로딩이
+            // 끝나지 않고 멈춰 있는 일이 없다.
+            markReady(it.id);
+          }
+        })
+      );
     }
 
     preloadAll();
@@ -215,43 +226,12 @@ export default function PerformanceMode({ items, teamId, initialIndex = 0, onClo
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // URL을 다 받으면 파일 자체(이미지/PDF)도 백그라운드에서 미리 받아 sheetId
-  // 기준으로 영구 저장해둔다(단순 HTTP 캐시 워밍업이 아니라 실제 Blob 저장).
-  // 온라인 연습 때 콘티를 한 번 훑어보면, 공연 중 네트워크가 끊겨도 이 저장된
-  // 파일로 계속 볼 수 있게 하기 위함이다.
+  // 언마운트(연주 모드 종료) 시 만들어둔 blob URL을 정리한다.
   useEffect(() => {
-    let cancelled = false;
-
-    async function cacheAll() {
-      for (const it of items) {
-        if (cancelled) return;
-        const url = signedUrls[it.id];
-        if (!url) continue;
-
-        try {
-          const res = await fetch(url);
-          if (!res.ok) continue;
-          const blob = await res.blob();
-          if (cancelled) return;
-          await cacheSheetFile(it.sheetId, it.updatedAt, blob);
-          if (!cancelled) {
-            setCachedSheetIds((prev) => new Set(prev).add(it.sheetId));
-          }
-        } catch {
-          // 이 곡 캐싱에 실패해도 나머지 곡은 계속 시도한다.
-        }
-      }
-    }
-
-    if (Object.keys(signedUrls).length > 0) {
-      cacheAll();
-    }
-
     return () => {
-      cancelled = true;
+      objectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [signedUrls]);
+  }, []);
 
   // 현재 로그인한 유저의 필기도 함께 캐시해둔다 — DrawingLayer는 각자 알아서
   // drawings 테이블을 조회하므로, 오프라인일 때 그 조회가 폴백할 수 있도록
@@ -296,17 +276,28 @@ export default function PerformanceMode({ items, teamId, initialIndex = 0, onClo
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items]);
 
-  const signedUrl = item?.id ? signedUrls[item.id] ?? null : null;
+  const validItems = useMemo(
+    () => items.filter((it): it is SetlistItem & { fileUrl: string } => !!it.fileUrl),
+    [items]
+  );
+
+  // 콘티의 모든 곡이 (성공이든 실패든) 준비되기 전까지는 연주 화면을 열지 않는다 —
+  // "시작" 버튼을 누르면 다 불러온 뒤에 시작되게 하기 위함이다.
+  const loading = validItems.length > 0 && readyIds.size < validItems.length;
+
+  const cachedSheetIds = useMemo(
+    () => new Set(validItems.filter((it) => localUrls[it.id]).map((it) => it.sheetId)),
+    [validItems, localUrls]
+  );
+
+  const currentError = item?.id ? itemErrors[item.id] ?? null : null;
   const hasCachedCurrent = item?.sheetId ? cachedSheetIds.has(item.sheetId) : false;
-  const canRenderOffline = hasCachedCurrent && !!item?.sheetId && !!item?.updatedAt;
-  const loading = preloading || !cacheChecked;
   const error = !item?.fileUrl
     ? '악보 파일이 없습니다.'
-    : !loading && !signedUrl && !canRenderOffline
-      ? preloadError ?? '파일을 불러올 수 없습니다.'
+    : !loading && currentError
+      ? currentError
       : null;
 
-  const isPdf = item?.fileUrl ? isPdfFile(item.fileUrl) : false;
   const cachedCount = cachedSheetIds.size;
 
   return (
@@ -327,7 +318,7 @@ export default function PerformanceMode({ items, teamId, initialIndex = 0, onClo
           </p>
           <p className="text-xs text-white/50 mt-0.5 text-right">
             {index + 1} / {items.length}
-            {cacheChecked && <span className="ml-2 text-white/30">· 오프라인 저장 {cachedCount}/{items.length}</span>}
+            <span className="ml-2 text-white/30">· 오프라인 저장 {cachedCount}/{items.length}</span>
           </p>
         </div>
         <div className="shrink-0 flex items-center px-4 py-3">
@@ -354,29 +345,59 @@ export default function PerformanceMode({ items, teamId, initialIndex = 0, onClo
         onPointerDown={handlePointerDown}
         onPointerUp={handlePointerUp}
       >
-        <div className="w-full h-full flex items-center justify-center">
-          {loading && <p className="text-sm text-white/50">불러오는 중...</p>}
-          {!loading && error && <p className="text-sm text-red-400 px-6 text-center">{error}</p>}
-          {!loading &&
-            !error &&
-            (signedUrl || canRenderOffline) &&
-            item?.sheetId &&
-            (isPdf ? (
-              <div className="relative w-full h-full select-none [-webkit-touch-callout:none]">
-                <PdfPageViewer src={signedUrl ?? ''} sheetId={item.sheetId} updatedAt={item.updatedAt} />
-                <DrawingLayer sheetId={item.sheetId} teamId={teamId} interactive={false} />
-              </div>
-            ) : (
-              <ImageDrawingStage
-                src={signedUrl ?? ''}
-                alt={item.title}
-                sheetId={item.sheetId}
-                updatedAt={item.updatedAt}
-                teamId={teamId}
-                interactive={false}
-              />
-            ))}
-        </div>
+        {(loading || error) && (
+          <div className="w-full h-full flex items-center justify-center">
+            {loading && (
+              <p className="text-sm text-white/50">
+                불러오는 중... ({readyIds.size}/{validItems.length})
+              </p>
+            )}
+            {!loading && error && <p className="text-sm text-red-400 px-6 text-center">{error}</p>}
+          </div>
+        )}
+
+        {/* 콘티의 모든 곡을 미리 마운트해둔다(현재 곡만 보이게 하고 나머지는
+            숨김) — 곡 전환 시 언마운트/리마운트가 일어나지 않아야 뷰어가 다시
+            로딩·디코딩을 반복하지 않고, 이미 그려둔 화면을 그대로 즉시
+            보여줄 수 있다. */}
+        {validItems.map((it) => {
+          const url = localUrls[it.id];
+          if (!url) return null;
+
+          const isCurrent = item?.id === it.id;
+          const pdf = isPdfFile(it.fileUrl);
+
+          return (
+            <div
+              key={it.id}
+              className={`absolute inset-0 flex items-center justify-center ${
+                isCurrent && !loading ? '' : 'hidden'
+              }`}
+            >
+              {pdf ? (
+                <div className="relative w-full h-full select-none [-webkit-touch-callout:none]">
+                  <PdfPageViewer
+                    src={url}
+                    sheetId={it.sheetId}
+                    updatedAt={it.updatedAt}
+                    onReady={() => markReady(it.id)}
+                  />
+                  <DrawingLayer sheetId={it.sheetId} teamId={teamId} interactive={false} />
+                </div>
+              ) : (
+                <ImageDrawingStage
+                  src={url}
+                  alt={it.title}
+                  sheetId={it.sheetId}
+                  updatedAt={it.updatedAt}
+                  teamId={teamId}
+                  interactive={false}
+                  onReady={() => markReady(it.id)}
+                />
+              )}
+            </div>
+          );
+        })}
       </div>
 
       {item?.note && (

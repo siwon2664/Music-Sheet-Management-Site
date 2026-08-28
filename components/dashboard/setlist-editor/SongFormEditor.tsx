@@ -80,7 +80,12 @@ export default function SongFormEditor({ value, onChange }: SongFormEditorProps)
       )}
 
       {open && (
-        <div className="mt-2 border border-border rounded-lg p-2.5 bg-surface-hover flex flex-col gap-2.5">
+        // data-no-dnd: 마커 칩은 네이티브 HTML5 드래그(draggable)로 따로 순서를 바꾸므로,
+        // 콘티 카드 전체에 걸린 dnd-kit 드래그 활성화가 여기서는 절대 끼어들면 안 된다.
+        <div
+          data-no-dnd
+          className="mt-2 border border-border rounded-lg p-2.5 bg-surface-hover flex flex-col gap-2.5"
+        >
           <div className="bg-surface border border-border rounded-lg p-2 flex flex-col gap-1.5">
             <span className="text-[10px] font-medium text-muted">현재 순서</span>
             {value.length > 0 ? (

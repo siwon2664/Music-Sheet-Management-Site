@@ -97,10 +97,14 @@ export default function SheetsLibraryClient({ teamId, teamName, role, initialShe
 
   const allSelected = filteredSorted.length > 0 && selectedIds.size === filteredSorted.length;
 
-  // 이미지 파일들의 썸네일용 signed URL을 받아온다 (PDF는 아이콘만 표시).
+  // 미리보기가 가능한 파일들의 썸네일용 signed URL을 받아온다 — 이미지 파일 전부와,
+  // 업로드 시점에 첫 페이지 썸네일이 만들어진 PDF(thumbnail_url이 있는 경우)만 대상.
+  // 썸네일이 없는 PDF(이 기능이 추가되기 전에 올렸거나 생성 실패)는 계속 아이콘만 표시한다.
   // 세션 내 캐시를 먼저 확인해 이미 발급받은 URL은 페이지를 다시 열어도 재요청하지 않는다.
   useEffect(() => {
-    const imageSheets = sheets.filter((sheet) => sheet.file_url && !isPdfFile(sheet.file_url));
+    const imageSheets = sheets.filter(
+      (sheet) => sheet.file_url && (!isPdfFile(sheet.file_url) || sheet.thumbnail_url)
+    );
     if (imageSheets.length === 0) return;
 
     let cancelled = false;
@@ -529,6 +533,7 @@ export default function SheetsLibraryClient({ teamId, teamName, role, initialShe
                     <SheetThumbnail
                       title={sheet.title}
                       fileUrl={sheet.file_url}
+                      thumbnailUrl={sheet.thumbnail_url}
                       signedUrl={thumbnailUrls[sheet.id]}
                     />
                     <div className="min-w-0">

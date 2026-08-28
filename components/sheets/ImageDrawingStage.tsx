@@ -20,6 +20,9 @@ interface ImageDrawingStageProps {
   interactive?: boolean;
   // 오프라인 캐시 폴백에 쓰인다 — 있어야 캐시를 조회할 수 있다.
   updatedAt?: string;
+  // 연주 모드에서 모든 곡을 미리 렌더링해둘 때, 이 곡의 렌더링이 (성공이든
+  // 실패든) 끝났음을 상위 컴포넌트에 알리기 위한 콜백.
+  onReady?: () => void;
 }
 
 // 이미지도 PdfPageViewer와 같은 방식으로: 컨테이너를 꽉 채우되, 파일마다
@@ -33,6 +36,7 @@ export default function ImageDrawingStage({
   teamId,
   interactive = true,
   updatedAt,
+  onReady,
 }: ImageDrawingStageProps) {
   const outerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -109,6 +113,7 @@ export default function ImageDrawingStage({
         imgRef.current = img;
         setLoading(false);
         render();
+        onReady?.();
       };
       img.onerror = () => {
         if (cancelled) return;
@@ -127,6 +132,7 @@ export default function ImageDrawingStage({
       if (cancelled) return;
       setLoading(false);
       setError(!navigator.onLine ? '오프라인 상태라 이 곡은 불러올 수 없습니다.' : '이미지를 불러오지 못했습니다.');
+      onReady?.();
     }
 
     async function loadFromCache() {

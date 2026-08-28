@@ -1,8 +1,13 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/types/supabase';
-import { buildSheetImagePaths, buildSheetStoragePath } from './storage';
+import { buildSheetImagePaths, buildSheetStoragePath, buildSheetThumbnailPath } from './storage';
 import { createDisplayImage, createThumbnailImage, isResizableImage } from './image';
+import { createPdfThumbnailImage } from './pageCompose';
 import { isAllowedSheetFile, SHEET_FILE_TYPE_HINT } from './fileTypes';
+
+function isPdfFile(file: File): boolean {
+  return file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+}
 
 export interface SheetUploadResult {
   filePath: string;
@@ -57,5 +62,22 @@ export async function uploadSheetFile(
   const { error: uploadError } = await supabase.storage.from('sheets').upload(filePath, file);
   if (uploadError) return { data: null, error: uploadError.message };
 
-  return { data: { filePath, thumbnailPath: null }, error: null };
+  // PDF는 원본은 그대로 올리고, 목록에서 보여줄 첫 페이지 미리보기만 별도로 만들어
+  // 함께 올린다. 썸네일 생성이 실패해도(손상된 PDF 등) 원본 업로드 자체는 이미
+  // 끝난 뒤라 조용히 넘어간다 — 목록에서는 기존처럼 PDF 아이콘만 보이게 된다.
+  let thumbnailPath: string | null = null;
+  if (isPdfFile(file)) {
+    try {
+      const thumbnailImage = await createPdfThumbnailImage(file);
+      if (thumbnailImage) {
+        const path = buildSheetThumbnailPath(teamId);
+        const { error: thumbError } = await supabase.storage.from('sheets').upload(path, thumbnailImage);
+        if (!thumbError) thumbnailPath = path;
+      }
+    } catch {
+      thumbnailPath = null;
+    }
+  }
+
+  return { data: { filePath, thumbnailPath }, error: null };
 }

@@ -195,6 +195,7 @@ function DraggableSheetCard({ sheet, added, onAdd, onPreview }: DraggableSheetCa
       <div className="flex items-start gap-2">
         <button
           type="button"
+          data-dnd-handle
           {...attributes}
           {...listeners}
           disabled={added}

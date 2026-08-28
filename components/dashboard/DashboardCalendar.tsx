@@ -131,59 +131,74 @@ export default function DashboardCalendar({ teamId, role, year, month, setlists 
           </div>
         </div>
 
-        <div className="grid grid-cols-7 text-center text-xs text-muted mb-2">
-          {WEEKDAY_LABELS.map((label, i) => (
-            <div
-              key={label}
-              className={i === 0 ? 'text-red-500 dark:text-red-400' : i === 6 ? 'text-blue-500 dark:text-blue-400' : undefined}
-            >
-              {label}
-            </div>
-          ))}
-        </div>
-
-        <div className="grid grid-cols-7 gap-1">
-          {cells.map((day, i) => {
-            if (day === null) {
-              return <div key={i} />;
-            }
-
-            const dateKey = toDateKey(year, month, day);
-            const hasSetlist = setlistsByDate.has(dateKey);
-            const isSelected = selectedDate === dateKey;
-            const isToday = dateKey === today;
-
-            return (
-              <button
-                key={i}
-                type="button"
-                onClick={() => handleSelectDay(day)}
+        {/* 헤더(요일)와 날짜 칸을 하나의 테두리 박스로 감싸고, 칸마다 위/왼쪽 선을
+            그어서 전체적으로 이어진 표 형태의 옅은 구분선을 만든다. */}
+        <div className="border border-border rounded-lg overflow-hidden">
+          <div className="grid grid-cols-7 text-center text-xs text-muted">
+            {WEEKDAY_LABELS.map((label, i) => (
+              <div
+                key={label}
                 className={[
-                  'relative aspect-square flex flex-col items-center justify-center rounded text-sm',
-                  isSelected ? 'bg-accent text-accent-foreground' : 'hover:bg-surface-hover',
-                  isToday && !isSelected ? 'font-semibold text-blue-600 dark:text-blue-400' : '',
+                  'py-2',
+                  i > 0 ? 'border-l border-border' : '',
+                  i === 0 ? 'text-red-500 dark:text-red-400' : i === 6 ? 'text-blue-500 dark:text-blue-400' : '',
                 ].join(' ')}
               >
-                {isToday && (
-                  <span
-                    className={[
-                      'absolute top-1 left-1 w-1.5 h-1.5 rounded-full',
-                      isSelected ? 'bg-accent-foreground' : 'bg-blue-600 dark:bg-blue-400',
-                    ].join(' ')}
-                  />
-                )}
-                {day}
-                {hasSetlist && (
-                  <span
-                    className={[
-                      'absolute bottom-1 w-1.5 h-1.5 rounded-full',
-                      isSelected ? 'bg-accent-foreground' : 'bg-foreground',
-                    ].join(' ')}
-                  />
-                )}
-              </button>
-            );
-          })}
+                {label}
+              </div>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-7 border-t border-border">
+            {cells.map((day, i) => {
+              const col = i % 7;
+              const row = Math.floor(i / 7);
+              const gridLineClasses = [col > 0 ? 'border-l border-border' : '', row > 0 ? 'border-t border-border' : ''].join(
+                ' '
+              );
+
+              if (day === null) {
+                return <div key={i} className={['aspect-square', gridLineClasses].join(' ')} />;
+              }
+
+              const dateKey = toDateKey(year, month, day);
+              const hasSetlist = setlistsByDate.has(dateKey);
+              const isSelected = selectedDate === dateKey;
+              const isToday = dateKey === today;
+
+              return (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => handleSelectDay(day)}
+                  className={[
+                    'relative aspect-square flex flex-col items-center justify-center text-sm',
+                    gridLineClasses,
+                    isSelected ? 'bg-accent text-accent-foreground' : 'hover:bg-surface-hover',
+                    isToday && !isSelected ? 'font-semibold text-blue-600 dark:text-blue-400' : '',
+                  ].join(' ')}
+                >
+                  {isToday && (
+                    <span
+                      className={[
+                        'absolute top-1 left-1 w-1.5 h-1.5 rounded-full',
+                        isSelected ? 'bg-accent-foreground' : 'bg-blue-600 dark:bg-blue-400',
+                      ].join(' ')}
+                    />
+                  )}
+                  {day}
+                  {hasSetlist && (
+                    <span
+                      className={[
+                        'absolute bottom-1 w-1.5 h-1.5 rounded-full',
+                        isSelected ? 'bg-accent-foreground' : 'bg-foreground',
+                      ].join(' ')}
+                    />
+                  )}
+                </button>
+              );
+            })}
+          </div>
         </div>
       </section>
 

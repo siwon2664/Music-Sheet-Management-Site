@@ -185,16 +185,24 @@ function SortableSetlistRow({
 
   return (
     <div ref={setNodeRef} style={style} className={`mb-2 ${isDragging ? 'relative z-10' : 'relative'}`}>
+      {/*
+        attributes/listeners를 카드 전체에 건다 — 버튼·입력창(select/input/textarea/a/label)이나
+        data-no-dnd가 붙은 영역(곡 제목: 클릭하면 미리보기만 열려야 한다)에서 시작된 포인터는
+        SetlistEditor의 커스텀 센서가 걸러내므로, 카드의 나머지 영역(여백, 순서 번호 등) 어디를
+        길게 누르든 드래그를 시작할 수 있다. 그립 아이콘은 data-dnd-handle로 예외 처리해서
+        (버튼 태그라도) 여전히 전용 손잡이로 쓸 수 있다.
+      */}
       <div
-        className={`border border-border rounded-lg p-3 flex flex-col gap-2 bg-surface-hover transition-shadow ${
-          isDragging ? 'opacity-60 shadow-lg' : ''
-        }`}
+        {...attributes}
+        {...listeners}
+        className={`border border-border rounded-lg p-3 flex flex-col gap-2 bg-surface-hover transition-shadow select-none ${
+          canReorder ? 'cursor-grab active:cursor-grabbing' : ''
+        } ${isDragging ? 'opacity-60 shadow-lg' : ''}`}
       >
         <div className="flex items-start gap-2">
           <button
             type="button"
-            {...attributes}
-            {...listeners}
+            data-dnd-handle
             disabled={!canReorder}
             title={canReorder ? '드래그해서 순서 변경' : '팀장만 순서를 변경할 수 있습니다.'}
             aria-label={canReorder ? '드래그해서 순서 변경' : '팀장만 순서를 변경할 수 있습니다.'}
@@ -206,13 +214,15 @@ function SortableSetlistRow({
           </button>
           <span className="text-sm font-semibold text-muted w-5 shrink-0">{index + 1}</span>
           {/*
-            드래그 가능한 카드 안에 <button>처럼 네이티브로 포커스 가능한
-            요소가 있으면, 브라우저가 드래그 시작과 클릭 제스처를 혼동해
-            드래그가 간헐적으로 씹힌다. 그래서 클릭 가능한 div로 대체한다.
+            data-no-dnd: 이 영역에서 시작된 포인터는 드래그로 이어지지 않는다 — 탭(클릭)하면
+            항상 미리보기만 열려야 하기 때문. (버튼 대신 클릭 가능한 div를 쓰는 이유는 카드
+            안에 네이티브로 포커스 가능한 <button>이 있으면 브라우저가 드래그 시작과 클릭
+            제스처를 혼동해 드래그가 간헐적으로 씹히기 때문.)
           */}
           <div
             role="button"
             tabIndex={0}
+            data-no-dnd
             onClick={onPreview}
             onKeyDown={(e) => {
               if (e.key === 'Enter' || e.key === ' ') onPreview();
