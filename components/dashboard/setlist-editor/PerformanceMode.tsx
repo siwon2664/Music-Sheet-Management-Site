@@ -376,11 +376,18 @@ export default function PerformanceMode({ items, teamId, initialIndex = 0, onClo
             >
               {pdf ? (
                 <div className="relative w-full h-full select-none [-webkit-touch-callout:none]">
+                  {/* PdfPageViewer가 이 스와이프를 먼저 페이지 넘기기로 처리하고, 이미
+                      첫/마지막 페이지라 더 넘길 페이지가 없을 때만 onOverswipe로 여기
+                      알려온다 — 그때만 곡을 넘긴다. (같은 좌우 스와이프를 페이지 안에서
+                      쓰고 있을 땐 PdfPageViewer가 stopPropagation으로 이 영역의 곡 전환
+                      스와이프 핸들러(아래 onPointerDown/onPointerUp)로 다시 전달되는 걸
+                      막아준다 — 그래서 이미지 악보에서만 쓰이는 그 핸들러와 안 겹친다.) */}
                   <PdfPageViewer
                     src={url}
                     sheetId={it.sheetId}
                     updatedAt={it.updatedAt}
                     onReady={() => markReady(it.id)}
+                    onOverswipe={(direction) => (direction === 'next' ? goNext() : goPrev())}
                   />
                   <DrawingLayer sheetId={it.sheetId} teamId={teamId} interactive={false} />
                 </div>

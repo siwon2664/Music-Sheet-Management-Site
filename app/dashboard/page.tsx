@@ -7,6 +7,12 @@ import TopNav from '@/components/dashboard/TopNav';
 import DashboardCalendar from '@/components/dashboard/DashboardCalendar';
 import FixedSetlists from '@/components/dashboard/FixedSetlists';
 
+// year/month 쿼리스트링에 따라 완전히 다른 데이터를 보여주는 페이지라
+// 서버 쪽 캐시로 인해 이전 달의 응답이 재사용되지 않도록 명시적으로
+// 매 요청마다 새로 렌더링하게 한다.
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 function getMonthRange(year: number, month: number) {
   const pad = (n: number) => String(n).padStart(2, '0');
   const lastDay = new Date(year, month, 0).getDate();
@@ -101,6 +107,15 @@ export default async function DashboardPage({
       <main className="flex-1 p-4 md:p-6 max-w-6xl w-full mx-auto">
         <FixedSetlists setlists={fixedSetlists ?? []} teamId={team.id} role={team.role} />
         <DashboardCalendar
+          // year/month가 바뀌어도 클라이언트 사이드 이동(Link)에서는 같은
+          // DashboardCalendar 인스턴스가 재사용된다. 그런데 그 컴포넌트는
+          // setlists prop을 useState(setlists)로만 최초 1회 초기화해서
+          // 로컬 state(setlistsState)에 들고 있기 때문에, 달을 옮겨도 그
+          // state가 갱신되지 않고 예전 달 데이터를 그대로 들고 있었다(이게
+          // "하드 리프레시하면 보이는데 링크로 이동하면 안 보이는" 증상의
+          // 진짜 원인). year-month를 key로 줘서 달이 바뀔 때마다 컴포넌트를
+          // 통째로 새로 마운트시켜 state가 항상 최신 setlists로 초기화되게 한다.
+          key={`${year}-${month}`}
           teamId={team.id}
           role={team.role}
           year={year}

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { detectPdfPageContentBox } from '@/lib/pdfContentBox';
 import { getCachedSheetFile } from '@/lib/offlineSheetCache';
 
@@ -12,30 +12,64 @@ interface PdfPageViewerProps {
   // 연주 모드에서 모든 곡을 미리 렌더링해둘 때, 이 곡의 렌더링이 (성공이든
   // 실패든) 끝났음을 상위 컴포넌트에 알리기 위한 콜백.
   onReady?: () => void;
+  // 이미 첫/마지막 페이지인 상태에서 그 방향으로 스와이프를 한 번 더 하면 호출된다.
+  // 상위 컴포넌트가 이걸 받아 "이전/다음 곡"으로 넘어가는 데 쓸 수 있다 — 페이지
+  // 넘기기와 곡 넘기기를 하나의 좌우 동작으로 이어붙이는 용도.
+  onOverswipe?: (direction: 'next' | 'prev') => void;
 }
+
+// 스와이프로 페이지를 넘길 때 쓰는 임계값. PerformanceMode의 곡 전환 스와이프와
+// 같은 값을 써서 두 제스처가 이어붙였을 때 체감 감도가 똑같게 맞춘다.
+const SWIPE_THRESHOLD = 60;
 
 // 브라우저 내장 PDF 뷰어(iframe)는 파일마다 원본 페이지 크기에 따라 배율이 제각각이라
 // 악보마다 화면에 보이는 크기가 들쭉날쭉했다. pdf.js로 직접 캔버스에 그려서
 // 이미지 악보(object-contain)와 동일하게, 페이지 전체가 잘리지 않고 컨테이너
 // 안에 다 들어오도록(가로/세로 둘 다 맞춰서) 렌더링한다.
-export default function PdfPageViewer({ src, sheetId, updatedAt, onReady }: PdfPageViewerProps) {
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const pagesRef = useRef<HTMLDivElement>(null);
+//
+// 여러 장짜리 PDF는 예전엔 페이지를 세로로 쌓아두고 스크롤해서 보는 방식이었다.
+// 지금은 한 번에 한 페이지만 컨테이너 전체 크기로 보여주고, 좌우 스와이프로만
+// 페이지를 넘기는 방식으로 바뀌었다(버튼 없음) — 페이지별로 캔버스를 미리 다
+// 그려서 배열에 들고 있다가, 화면에는 현재 페이지의 캔버스 하나만 붙인다.
+export default function PdfPageViewer({ src, sheetId, updatedAt, onReady, onOverswipe }: PdfPageViewerProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const pageSlotRef = useRef<HTMLDivElement>(null);
+  const canvasesRef = useRef<HTMLCanvasElement[]>([]);
   const renderIdRef = useRef(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [pageIndex, setPageIndex] = useState(0);
+  const [pageCount, setPageCount] = useState(0);
+  // 스와이프 판정 콜백(handlePointerUp)이 항상 최신 페이지 번호를 보게 하려고
+  // state와 나란히 ref로도 들고 있는다(클로저 안에서 state를 직접 읽으면 그
+  // 콜백이 만들어진 시점의 값에 고정돼버린다).
+  const pageIndexRef = useRef(0);
+
+  const dragStartRef = useRef<{ x: number; y: number } | null>(null);
+
+  const showPage = useCallback((index: number) => {
+    const slot = pageSlotRef.current;
+    if (!slot) return;
+    const canvas = canvasesRef.current[index];
+    slot.replaceChildren(...(canvas ? [canvas] : []));
+  }, []);
 
   useEffect(() => {
     let resizeTimeout: ReturnType<typeof setTimeout>;
+
+    // 새 문서(다른 src/sheetId/updatedAt)를 여는 경우에만 1페이지로 돌아간다.
+    // 아래 ResizeObserver가 같은 문서를 다시 그릴 때는 이 값을 건드리지 않아서,
+    // 화면 크기가 바뀌어도(기기 회전 등) 보고 있던 페이지가 유지된다.
+    pageIndexRef.current = 0;
+    setPageIndex(0);
 
     // 초기 로드와 ResizeObserver의 최초 콜백이 거의 동시에 render()를 부를 수 있어서,
     // 세대(generation) 번호로 뒤늦게 끝나는 이전 호출의 결과물이 DOM에 붙지 않도록 막는다.
     // 이게 없으면 같은 페이지가 중복으로 쌓여 보이는 문제가 생긴다.
     async function render() {
       const myRenderId = ++renderIdRef.current;
-      const scroller = scrollRef.current;
-      const pagesContainer = pagesRef.current;
-      if (!scroller || !pagesContainer) return;
+      const container = containerRef.current;
+      if (!container) return;
 
       setLoading(true);
       setError(null);
@@ -73,8 +107,8 @@ export default function PdfPageViewer({ src, sheetId, updatedAt, onReady }: PdfP
         }
         if (renderIdRef.current !== myRenderId) return;
 
-        const containerWidth = scroller.clientWidth;
-        const containerHeight = scroller.clientHeight;
+        const containerWidth = container.clientWidth;
+        const containerHeight = container.clientHeight;
 
         // 그리는 동안에도 화면이 비지 않도록, 기존 페이지는 그대로 둔 채
         // 새 페이지들을 다 그리고 나서 마지막에 한 번에 통째로 교체한다.
@@ -118,7 +152,6 @@ export default function PdfPageViewer({ src, sheetId, updatedAt, onReady }: PdfP
           canvas.style.width = `${canvas.width / outputScale}px`;
           canvas.style.height = `${canvas.height / outputScale}px`;
           canvas.style.display = 'block';
-          if (pageNumber < pdf.numPages) canvas.style.marginBottom = '8px';
 
           const ctx = canvas.getContext('2d');
           if (!ctx) continue;
@@ -128,7 +161,14 @@ export default function PdfPageViewer({ src, sheetId, updatedAt, onReady }: PdfP
         }
 
         if (renderIdRef.current !== myRenderId) return;
-        pagesContainer.replaceChildren(...newCanvases);
+        canvasesRef.current = newCanvases;
+        setPageCount(newCanvases.length);
+        // 리사이즈로 다시 그린 경우 보던 페이지를 유지하되, 혹시(재로딩 등으로)
+        // 페이지 수가 줄어들었으면 범위 안으로 당겨준다.
+        const clampedIndex = Math.min(pageIndexRef.current, Math.max(0, newCanvases.length - 1));
+        pageIndexRef.current = clampedIndex;
+        setPageIndex(clampedIndex);
+        showPage(clampedIndex);
       } catch (err) {
         if (renderIdRef.current === myRenderId) {
           setError(
@@ -136,7 +176,9 @@ export default function PdfPageViewer({ src, sheetId, updatedAt, onReady }: PdfP
               ? '오프라인 상태라 이 곡은 불러올 수 없습니다.'
               : 'PDF를 불러오지 못했습니다.'
           );
-          pagesContainer.replaceChildren();
+          canvasesRef.current = [];
+          setPageCount(0);
+          pageSlotRef.current?.replaceChildren();
         }
       } finally {
         if (renderIdRef.current === myRenderId) {
@@ -148,12 +190,12 @@ export default function PdfPageViewer({ src, sheetId, updatedAt, onReady }: PdfP
 
     render();
 
-    const scroller = scrollRef.current;
+    const container = containerRef.current;
     // ResizeObserver는 observe() 시작 직후 실제 크기 변화가 없어도 최초 콜백을
     // 한 번 무조건 발생시킨다. 위에서 이미 render()를 호출했으니 이 최초 콜백은
     // 무시하지 않으면 곡을 열 때마다 항상 렌더링이 중복돼 화면이 한 번 더 깜빡인다.
     let isFirstResizeCallback = true;
-    const observer = scroller
+    const observer = container
       ? new ResizeObserver(() => {
           if (isFirstResizeCallback) {
             isFirstResizeCallback = false;
@@ -163,23 +205,79 @@ export default function PdfPageViewer({ src, sheetId, updatedAt, onReady }: PdfP
           resizeTimeout = setTimeout(render, 200);
         })
       : null;
-    if (scroller) observer?.observe(scroller);
+    if (container) observer?.observe(container);
 
     return () => {
       renderIdRef.current += 1;
       clearTimeout(resizeTimeout);
       observer?.disconnect();
     };
-  }, [src, sheetId, updatedAt]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [src, sheetId, updatedAt, showPage]);
+
+  // index가 범위를 벗어나면(첫 페이지에서 더 이전으로, 마지막 페이지에서 더
+  // 다음으로) 페이지를 넘기는 대신 onOverswipe로 "곡을 넘겨달라"고 알린다.
+  function goToPage(index: number) {
+    const count = canvasesRef.current.length;
+    if (count === 0) return;
+    if (index < 0) {
+      onOverswipe?.('prev');
+      return;
+    }
+    if (index >= count) {
+      onOverswipe?.('next');
+      return;
+    }
+    pageIndexRef.current = index;
+    setPageIndex(index);
+    showPage(index);
+  }
+
+  function handlePointerDown(e: ReactPointerEvent<HTMLDivElement>) {
+    dragStartRef.current = { x: e.clientX, y: e.clientY };
+  }
+
+  function handlePointerUp(e: ReactPointerEvent<HTMLDivElement>) {
+    const start = dragStartRef.current;
+    dragStartRef.current = null;
+    if (!start) return;
+
+    const deltaX = e.clientX - start.x;
+    const deltaY = e.clientY - start.y;
+    // 세로로 더 많이 움직였거나 너무 짧게 움직인 제스처는 탭/오조작으로 보고 무시한다.
+    if (Math.abs(deltaX) < SWIPE_THRESHOLD || Math.abs(deltaX) < Math.abs(deltaY) * 1.5) return;
+
+    // 페이지 넘기기로 확실히 인식된 스와이프다 — 이 제스처가 상위(연주 모드의
+    // 곡 전환 스와이프)로 또 전달돼서 같은 스와이프 한 번에 페이지도 넘어가고
+    // 곡도 같이 넘어가 버리는 걸 막는다. (onOverswipe로 곡을 넘기는 경우도
+    // 마찬가지 — 상위의 독립적인 스와이프 판정이 같은 제스처를 또 처리하면
+    // 곡이 두 개씩 건너뛴다.)
+    e.stopPropagation();
+
+    if (deltaX > 0) goToPage(pageIndexRef.current - 1);
+    else goToPage(pageIndexRef.current + 1);
+  }
+
+  const showPageBadge = !loading && !error && pageCount > 1;
 
   return (
     <div
-      ref={scrollRef}
-      className="relative w-full h-full overflow-auto bg-white select-none [-webkit-touch-callout:none]"
+      ref={containerRef}
+      onPointerDown={handlePointerDown}
+      onPointerUp={handlePointerUp}
+      className="relative w-full h-full overflow-hidden bg-white select-none [-webkit-touch-callout:none] flex items-center justify-center"
     >
       {loading && <p className="text-sm text-gray-400 p-4">불러오는 중...</p>}
       {error && <p className="text-sm text-red-500 p-4">{error}</p>}
-      <div ref={pagesRef} className="flex flex-col items-center" />
+      <div ref={pageSlotRef} className="flex items-center justify-center" />
+
+      {/* 버튼 없이 좌우 스와이프로만 페이지를 넘긴다 — 지금 몇 페이지인지만
+          작게 알려준다. */}
+      {showPageBadge && (
+        <span className="absolute bottom-1.5 left-1/2 -translate-x-1/2 text-[11px] text-black/50 bg-white/70 rounded-full px-2 py-0.5 pointer-events-none">
+          {pageIndex + 1} / {pageCount}
+        </span>
+      )}
     </div>
   );
 }

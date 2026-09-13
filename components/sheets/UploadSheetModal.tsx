@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, type DragEvent as ReactDragEvent, type FormEvent } from 'react';
-import { UploadCloud, X } from 'lucide-react';
+import { Sparkles, UploadCloud, X } from 'lucide-react';
 import {
   DndContext,
   closestCenter,
@@ -24,6 +24,7 @@ import { uploadSheetFile } from '@/lib/sheetUpload';
 import { isAllowedSheetFile, SHEET_FILE_ACCEPT, SHEET_FILE_TYPE_HINT } from '@/lib/fileTypes';
 import { MAX_SHEETS_PER_TEAM, SHEET_LIMIT_MESSAGE } from '@/lib/limits';
 import { composePagesIntoFile, expandFileToPages, revokePagePreview, type PendingPage } from '@/lib/pageCompose';
+import { recognizeSheet } from '@/lib/sheetRecognition';
 import type { SheetRow } from './SheetsLibraryClient';
 
 interface UploadSheetModalProps {
@@ -55,6 +56,12 @@ export default function UploadSheetModal({
   const [dropActive, setDropActive] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // 첫 페이지에서 제목/Key를 자동 인식해 제안하는 기능. 정확도가 100%가
+  // 아니므로 결과는 항상 입력 필드에 채워주기만 하고 사용자가 직접 확인·
+  // 수정할 수 있게 둔다.
+  const [recognizing, setRecognizing] = useState(false);
+  const [recognitionNote, setRecognitionNote] = useState<string | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -95,6 +102,42 @@ export default function UploadSheetModal({
       if (oldIndex === -1 || newIndex === -1) return prev;
       return arrayMove(prev, oldIndex, newIndex);
     });
+  }
+
+  async function handleAutoRecognize() {
+    if (pages.length === 0 || recognizing) return;
+
+    setRecognizing(true);
+    setRecognitionNote(null);
+    try {
+      const result = await recognizeSheet(pages[0]);
+
+      if (result.title) setTitle(result.title);
+      if (result.key) setKey(result.key);
+
+      if (!result.title && !result.key) {
+        setRecognitionNote('제목/Key를 인식하지 못했습니다. 직접 입력해주세요.');
+      } else {
+        const parts: string[] = [];
+        parts.push(result.title ? `제목 "${result.title}"` : '제목 인식 실패');
+        parts.push(
+          result.key
+            ? `Key "${result.key}" (신뢰도 ${result.keyConfidence >= 0.5 ? '높음' : '낮음, 꼭 확인하세요'})`
+            : 'Key 인식 실패'
+        );
+        // Key 추정이 틀렸을 때 "실제로 뭘 읽었길래 이렇게 나왔는지" 바로
+        // 보이게, 인식된 코드 원문도 같이 보여준다 (디버깅 목적 겸 사용자가
+        // 스스로 신뢰도를 판단하는 데도 도움이 된다).
+        if (result.chordsFound.length > 0) {
+          parts.push(`인식된 코드: ${result.chordsFound.join(', ')}`);
+        }
+        setRecognitionNote(`자동 인식: ${parts.join(' · ')} — 채워진 값은 확인 후 필요하면 수정해주세요.`);
+      }
+    } catch {
+      setRecognitionNote('자동 인식 중 문제가 발생했습니다. 직접 입력해주세요.');
+    } finally {
+      setRecognizing(false);
+    }
   }
 
   function handleDropZoneDrop(e: ReactDragEvent<HTMLLabelElement>) {
@@ -285,6 +328,17 @@ export default function UploadSheetModal({
                     </div>
                   </SortableContext>
                 </DndContext>
+
+                <button
+                  type="button"
+                  onClick={handleAutoRecognize}
+                  disabled={recognizing}
+                  className="mt-1 inline-flex items-center gap-1.5 self-start rounded border border-border px-3 py-1.5 text-xs hover:bg-surface-hover disabled:opacity-50"
+                >
+                  <Sparkles size={14} />
+                  {recognizing ? '인식 중... (몇 초 걸릴 수 있어요)' : '제목·Key 자동 인식 (첫 페이지 기준)'}
+                </button>
+                {recognitionNote && <p className="text-xs text-muted">{recognitionNote}</p>}
               </>
             )}
           </div>

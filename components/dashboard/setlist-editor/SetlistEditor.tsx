@@ -102,6 +102,16 @@ export default function SetlistEditor({
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
 
+  // 자동저장: items가 바뀔 때마다 debounce 타이머를 새로 걸고, 타이머가 끝나면
+  // 그 시점의 최신 items로 저장한다. setTimeout 콜백 안에서는 클로저로 캡처된
+  // 오래된 items를 보게 되므로, 항상 최신 값을 들고 있는 ref를 따로 둬서 읽는다.
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 최초 마운트 시 initialItems로 items가 세팅되는 것까지 저장 대상으로 잡으면
+  // 페이지를 열기만 해도 불필요한 delete+insert가 발생하므로, 첫 렌더는 건너뛴다.
+  const isFirstRenderRef = useRef(true);
+
   // 라이브러리 카드 드래그(악보 추가)와 콘티 목록 내부 순서 변경(dnd-kit sortable)을
   // 하나의 DndContext에서 함께 처리한다 — 마우스/터치 센서를 따로 둬서, 모바일에서도
   // 라이브러리 카드나 콘티 카드를 길게 눌러 끌 수 있다(아래 sensors 참고).
@@ -338,10 +348,15 @@ export default function SetlistEditor({
     if (updateError) setError(updateError.message);
   }
 
-  async function handleSave() {
+  // handleSave(수동 저장)와 자동저장 타이머 콜백이 공유하는 실제 저장 로직.
+  // 항상 "현재 setlist_sheets 행을 전부 지우고 넘겨받은 items로 다시 채우는" 방식이라,
+  // 다른 기기가 먼저 저장해둔 내용을 이 함수 호출 시점의 로컬 items가 그대로 덮어쓸 수
+  // 있다 — 같은 콘티를 동시에 열어놓고 편집하는 상황이면 나중에 저장되는 쪽이 이긴다.
+  // 자동저장이 debounce로 저장 주기를 짧게 만들어서 이 위험을 줄여주긴 하지만 완전히
+  // 없애주지는 않는다는 점은 알아두고 쓴다.
+  async function persistItems(itemsToSave: SetlistItem[]): Promise<boolean> {
     setSaving(true);
     setError(null);
-    setSaved(false);
 
     const { error: deleteError } = await supabase
       .from('setlist_sheets')
@@ -351,12 +366,12 @@ export default function SetlistEditor({
     if (deleteError) {
       setSaving(false);
       setError(deleteError.message);
-      return;
+      return false;
     }
 
-    if (items.length > 0) {
+    if (itemsToSave.length > 0) {
       const { error: insertError } = await supabase.from('setlist_sheets').insert(
-        items.map((item, index) => ({
+        itemsToSave.map((item, index) => ({
           setlist_id: setlistId,
           sheet_id: item.sheetId,
           team_id: teamId,
@@ -370,13 +385,66 @@ export default function SetlistEditor({
       if (insertError) {
         setSaving(false);
         setError(insertError.message);
-        return;
+        return false;
       }
     }
 
     setSaving(false);
     setSaved(true);
-    router.refresh();
+    return true;
+  }
+
+  // 대기 중인 자동저장 타이머가 있으면 취소하고 지금 즉시 저장한다 — 수동 저장 버튼과
+  // 탭을 닫거나 다른 화면으로 이동하기 직전(아래 beforeunload/언마운트 effect)에 쓴다.
+  function flushPendingSave() {
+    if (!saveTimeoutRef.current) return;
+    clearTimeout(saveTimeoutRef.current);
+    saveTimeoutRef.current = null;
+    void persistItems(itemsRef.current);
+  }
+
+  function scheduleAutosave() {
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    saveTimeoutRef.current = setTimeout(() => {
+      saveTimeoutRef.current = null;
+      void persistItems(itemsRef.current);
+    }, 1200);
+  }
+
+  // items가 바뀔 때마다(곡 추가/삭제/순서변경/Key·BPM·메모·송폼 수정) 자동저장을 예약한다.
+  // 타이핑처럼 짧은 시간에 여러 번 바뀌는 경우 매번 저장하지 않도록 1.2초 debounce.
+  useEffect(() => {
+    if (isFirstRenderRef.current) {
+      isFirstRenderRef.current = false;
+      return;
+    }
+    scheduleAutosave();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items]);
+
+  // 탭을 닫거나(beforeunload) 이 화면을 벗어날 때(언마운트) 아직 저장 안 된 변경사항이
+  // 남아있다면 바로 저장을 시도한다. 브라우저 탭을 강제로 닫는 경우까지 100% 보장하진
+  // 못하지만(비동기 요청이라 완료 전에 끊길 수 있음), 앱 안에서 다른 화면으로 이동하는
+  // 경우엔 요청이 계속 진행되므로 실질적으로 대부분의 케이스를 커버한다.
+  useEffect(() => {
+    function handleBeforeUnload() {
+      flushPendingSave();
+    }
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      flushPendingSave();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function handleSave() {
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = null;
+    }
+    const ok = await persistItems(items);
+    if (ok) router.refresh();
   }
 
   async function handleDeleteSetlist() {
@@ -432,7 +500,7 @@ export default function SetlistEditor({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        <p className="text-sm text-muted">곡을 추가하고 순서·Key·메모를 정리한 뒤 저장하세요.</p>
+        <p className="text-sm text-muted">곡을 추가하고 순서·Key·메모를 정리하세요. 변경사항은 잠시 후 자동으로 저장됩니다.</p>
         <div className="flex items-center gap-3">
           {saved && <span className="text-sm text-green-600 dark:text-green-400">저장됨</span>}
           {error && <span className="text-sm text-red-600 dark:text-red-400">{error}</span>}

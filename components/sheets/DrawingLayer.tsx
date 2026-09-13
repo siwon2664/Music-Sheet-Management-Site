@@ -375,8 +375,21 @@ export default function DrawingLayer({ sheetId, teamId, interactive = true }: Dr
   const CurrentToolIcon =
     tool === 'highlighter' ? Highlighter : tool === 'eraser' ? Eraser : tool === 'pan' ? Hand : Pencil;
 
+  // 실제로 그릴 수 있는 상태인지(펜/형광펜/지우개가 선택돼 있고 상호작용 가능할 때)만
+  // true다. 이게 아니면(pan 도구거나 interactive=false) 이 레이어 전체(래퍼 div까지)를
+  // pointer-events-none으로 비워서, 스와이프·클릭 같은 제스처가 그대로 뚫고 지나가
+  // 밑에 깔린 PdfPageViewer/ImageDrawingStage에 닿도록 한다. 예전엔 <canvas>에만 이걸
+  // 걸어뒀는데, 그 canvas를 담고 있는 이 래퍼 div 자체(전체 화면을 absolute inset-0로
+  // 덮고 있음)는 계속 pointer-events: auto였어서 — 투명해서 안 보일 뿐 여전히 화면
+  // 전체의 클릭/터치를 가로채고 있었다. 도구가 'pan'이어도(기본값) 이 래퍼가 막고
+  // 있었던 셈이라, 악보 페이지 스크롤/스와이프가 전혀 먹히지 않는 원인이었다.
+  const canDraw = tool !== 'pan' && interactive;
+
   return (
-    <div ref={containerRef} className="absolute inset-0 select-none [-webkit-touch-callout:none]">
+    <div
+      ref={containerRef}
+      className={`absolute inset-0 select-none [-webkit-touch-callout:none] ${canDraw ? '' : 'pointer-events-none'}`}
+    >
       <canvas
         ref={canvasRef}
         onPointerDown={handlePointerDown}
@@ -385,7 +398,7 @@ export default function DrawingLayer({ sheetId, teamId, interactive = true }: Dr
         onPointerCancel={handlePointerUp}
         style={{ touchAction: 'none' }}
         className={`absolute inset-0 select-none [-webkit-touch-callout:none] ${
-          tool !== 'pan' && interactive ? 'cursor-crosshair' : 'pointer-events-none'
+          canDraw ? 'cursor-crosshair' : 'pointer-events-none'
         }`}
       />
 
@@ -393,7 +406,10 @@ export default function DrawingLayer({ sheetId, teamId, interactive = true }: Dr
       <div
         ref={toolbarRef}
         onClick={(e) => e.stopPropagation()}
-        style={{ left: toolbarPos.x, top: toolbarPos.y }}
+        // 래퍼가 pointer-events-none이어도(그리는 중이 아닐 때, 즉 대부분의 경우) 도구
+        // 모음 자체는 항상 눌려야 한다 — pan 상태에서도 펜으로 도구를 바꿀 수 있어야
+        // 하므로, 부모의 none을 명시적으로 다시 auto로 덮어쓴다.
+        style={{ left: toolbarPos.x, top: toolbarPos.y, pointerEvents: 'auto' }}
         className={`fixed z-[60] flex flex-col gap-1.5 bg-black/80 rounded-2xl p-2 w-44 max-h-[75%] overflow-y-auto ${
           dragging ? 'opacity-80' : ''
         }`}

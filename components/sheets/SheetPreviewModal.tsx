@@ -173,7 +173,13 @@ export default function SheetPreviewModal({ sheets, initialIndex, teamId, onClos
               <>
                 {isPdf ? (
                   <div className="relative w-full h-full select-none [-webkit-touch-callout:none]">
-                    <PdfPageViewer src={signedUrl} />
+                    {/* 페이지 넘기기 스와이프가 (이미 첫/마지막 페이지라) 더 갈 곳이 없으면
+                        같은 방향으로 곡도 이어서 넘어가게 한다 — 페이지 넘기기와 곡 넘기기를
+                        하나의 좌우 동작으로 이어붙인다. */}
+                    <PdfPageViewer
+                      src={signedUrl}
+                      onOverswipe={(direction) => (direction === 'next' ? goNext() : goPrev())}
+                    />
                     <DrawingLayer sheetId={actualSheetId} teamId={teamId} />
                   </div>
                 ) : (
