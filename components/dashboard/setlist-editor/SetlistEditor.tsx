@@ -163,6 +163,7 @@ export default function SetlistEditor({
       transposedKey: null,
       note: '',
       fileUrl: sheet.file_url,
+      thumbnailUrl: sheet.thumbnail_url,
       songForm: [],
       bpm: sheet.bpm,
       updatedAt: sheet.updated_at,

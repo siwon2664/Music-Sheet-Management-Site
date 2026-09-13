@@ -8,6 +8,7 @@ import {
   ArrowUpDown,
   CalendarPlus,
   Download,
+  MoreVertical,
   Pencil,
   Plus,
   Search,
@@ -60,7 +61,9 @@ export default function SheetsLibraryClient({ teamId, teamName, role, initialShe
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showUploadModal, setShowUploadModal] = useState(false);
-  const [showEditModal, setShowEditModal] = useState(false);
+  // 편집 대상 — 상단 "편집하기" 버튼(체크박스 선택 기반)과 각 행의 ⋮ 메뉴("수정") 둘
+  // 다 여기로 모아서 같은 EditSheetModal 인스턴스를 띄운다.
+  const [editingSheet, setEditingSheet] = useState<SheetRow | null>(null);
   const [showCreateSetlistModal, setShowCreateSetlistModal] = useState(false);
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -202,6 +205,32 @@ export default function SheetsLibraryClient({ teamId, teamName, role, initialShe
 
     setSheets((prev) => prev.filter((sheet) => !selectedIds.has(sheet.id)));
     setSelectedIds(new Set());
+    router.refresh();
+  }
+
+  // 행 메뉴에서 악보 하나만 바로 삭제 — 체크박스 선택 상태와 무관하게 동작한다.
+  async function handleDeleteSingle(sheet: SheetRow) {
+    if (!confirm(`"${sheet.title}"을(를) 삭제할까요?`)) return;
+
+    setDeleting(true);
+    setError(null);
+
+    const { error: deleteError } = await supabase.from('sheets').delete().eq('id', sheet.id);
+
+    setDeleting(false);
+
+    if (deleteError) {
+      setError(deleteError.message);
+      return;
+    }
+
+    setSheets((prev) => prev.filter((s) => s.id !== sheet.id));
+    setSelectedIds((prev) => {
+      if (!prev.has(sheet.id)) return prev;
+      const next = new Set(prev);
+      next.delete(sheet.id);
+      return next;
+    });
     router.refresh();
   }
 
@@ -427,7 +456,7 @@ export default function SheetsLibraryClient({ teamId, teamName, role, initialShe
         <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={() => setShowEditModal(true)}
+            onClick={() => setEditingSheet(selectedSheets[0] ?? null)}
             disabled={selectedSheets.length !== 1}
             title={selectedSheets.length !== 1 ? '악보 하나를 선택하면 정보를 수정할 수 있습니다.' : undefined}
             className="flex items-center gap-2 text-sm font-medium border border-border rounded px-4 py-2 hover:bg-surface-hover disabled:opacity-40 disabled:cursor-not-allowed"
@@ -512,6 +541,9 @@ export default function SheetsLibraryClient({ teamId, teamName, role, initialShe
                   등록일 {renderSortIcon('created_at')}
                 </button>
               </th>
+              <th className="w-10 px-2 py-3">
+                <span className="sr-only">관리</span>
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -559,12 +591,18 @@ export default function SheetsLibraryClient({ teamId, teamName, role, initialShe
                 <td className="px-2 py-3 align-top text-muted">
                   {new Date(sheet.created_at).toLocaleDateString('ko-KR')}
                 </td>
+                <td className="px-2 py-3 align-top text-right" onClick={(e) => e.stopPropagation()}>
+                  <SheetRowMenu
+                    onEdit={() => setEditingSheet(sheet)}
+                    onDelete={canDelete ? () => handleDeleteSingle(sheet) : undefined}
+                  />
+                </td>
               </tr>
             ))}
 
             {filteredSorted.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-10 text-center text-muted">
+                <td colSpan={7} className="px-4 py-10 text-center text-muted">
                   {sheets.length === 0 ? '등록된 악보가 없습니다.' : '검색 결과가 없습니다.'}
                 </td>
               </tr>
@@ -587,14 +625,14 @@ export default function SheetsLibraryClient({ teamId, teamName, role, initialShe
         />
       )}
 
-      {showEditModal && selectedSheets.length === 1 && (
+      {editingSheet && (
         <EditSheetModal
-          sheet={selectedSheets[0]}
+          sheet={editingSheet}
           teamId={teamId}
-          onClose={() => setShowEditModal(false)}
+          onClose={() => setEditingSheet(null)}
           onUpdated={(updated) => {
             setSheets((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
-            setShowEditModal(false);
+            setEditingSheet(null);
             router.refresh();
           }}
         />
@@ -689,6 +727,80 @@ export default function SheetsLibraryClient({ teamId, teamName, role, initialShe
               </>
             )}
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface SheetRowMenuProps {
+  onEdit: () => void;
+  // 없으면(팀원 권한 등으로 삭제 불가) 삭제 항목 자체를 안 보여준다.
+  onDelete?: () => void;
+}
+
+// 각 행 끝의 ⋮ 버튼 — 체크박스로 선택하지 않아도 그 행 하나만 바로 수정/삭제할 수 있게 한다.
+function SheetRowMenu({ onEdit, onDelete }: SheetRowMenuProps) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+
+    function handlePointerDown(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+
+    document.addEventListener('mousedown', handlePointerDown);
+    return () => document.removeEventListener('mousedown', handlePointerDown);
+  }, [open]);
+
+  return (
+    <div ref={containerRef} className="relative inline-block text-left">
+      <button
+        type="button"
+        onClick={() => setOpen((prev) => !prev)}
+        className="flex items-center justify-center w-7 h-7 rounded text-muted hover:text-foreground hover:bg-surface-hover"
+        aria-label="더보기"
+        aria-haspopup="menu"
+        aria-expanded={open}
+      >
+        <MoreVertical size={16} />
+      </button>
+
+      {open && (
+        <div
+          role="menu"
+          className="absolute right-0 top-full mt-1 z-30 w-32 bg-surface border border-border rounded-lg shadow-lg py-1"
+        >
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              onEdit();
+            }}
+            className="flex items-center gap-2 w-full text-left px-3 py-2 text-sm hover:bg-surface-hover"
+          >
+            <Pencil size={14} />
+            수정
+          </button>
+          {onDelete && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false);
+                onDelete();
+              }}
+              className="flex items-center gap-2 w-full text-left px-3 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10"
+            >
+              <Trash2 size={14} />
+              삭제
+            </button>
+          )}
         </div>
       )}
     </div>

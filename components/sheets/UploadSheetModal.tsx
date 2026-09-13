@@ -2,29 +2,13 @@
 
 import { useState, type DragEvent as ReactDragEvent, type FormEvent } from 'react';
 import { Sparkles, UploadCloud, X } from 'lucide-react';
-import {
-  DndContext,
-  closestCenter,
-  PointerSensor,
-  KeyboardSensor,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-} from '@dnd-kit/core';
-import {
-  SortableContext,
-  arrayMove,
-  horizontalListSortingStrategy,
-  sortableKeyboardCoordinates,
-  useSortable,
-} from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
 import { createClient } from '@/lib/supabase/client';
 import { uploadSheetFile } from '@/lib/sheetUpload';
 import { isAllowedSheetFile, SHEET_FILE_ACCEPT, SHEET_FILE_TYPE_HINT } from '@/lib/fileTypes';
 import { MAX_SHEETS_PER_TEAM, SHEET_LIMIT_MESSAGE } from '@/lib/limits';
 import { composePagesIntoFile, expandFileToPages, revokePagePreview, type PendingPage } from '@/lib/pageCompose';
 import { recognizeSheet } from '@/lib/sheetRecognition';
+import PageThumbStrip from './PageThumbStrip';
 import type { SheetRow } from './SheetsLibraryClient';
 
 interface UploadSheetModalProps {
@@ -63,11 +47,6 @@ export default function UploadSheetModal({
   const [recognizing, setRecognizing] = useState(false);
   const [recognitionNote, setRecognitionNote] = useState<string | null>(null);
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
-  );
-
   async function addFiles(files: File[]) {
     const valid = files.filter((f) => isAllowedSheetFile(f));
     if (valid.length < files.length) setError(SHEET_FILE_TYPE_HINT);
@@ -90,17 +69,6 @@ export default function UploadSheetModal({
       const target = prev.find((p) => p.id === id);
       if (target) revokePagePreview(target);
       return prev.filter((p) => p.id !== id);
-    });
-  }
-
-  function handleDragEnd(event: DragEndEvent) {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-    setPages((prev) => {
-      const oldIndex = prev.findIndex((p) => p.id === active.id);
-      const newIndex = prev.findIndex((p) => p.id === over.id);
-      if (oldIndex === -1 || newIndex === -1) return prev;
-      return arrayMove(prev, oldIndex, newIndex);
     });
   }
 
@@ -314,20 +282,7 @@ export default function UploadSheetModal({
                 <p className="text-xs text-muted mt-1">
                   {pages.length}장 선택됨 — 손잡이로 순서를 바꾸거나 X로 제외할 수 있어요
                 </p>
-                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-                  <SortableContext items={pages.map((p) => p.id)} strategy={horizontalListSortingStrategy}>
-                    <div className="flex gap-2 overflow-x-auto py-1 -mx-1 px-1">
-                      {pages.map((page, index) => (
-                        <SortablePageThumb
-                          key={page.id}
-                          page={page}
-                          index={index}
-                          onRemove={() => removePage(page.id)}
-                        />
-                      ))}
-                    </div>
-                  </SortableContext>
-                </DndContext>
+                <PageThumbStrip pages={pages} onReorder={setPages} onRemove={removePage} />
 
                 <button
                   type="button"
@@ -364,53 +319,6 @@ export default function UploadSheetModal({
           </div>
         </form>
       </div>
-    </div>
-  );
-}
-
-interface SortablePageThumbProps {
-  page: PendingPage;
-  index: number;
-  onRemove: () => void;
-}
-
-function SortablePageThumb({ page, index, onRemove }: SortablePageThumbProps) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: page.id });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  };
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      {...attributes}
-      {...listeners}
-      className={`relative shrink-0 w-16 h-24 border border-border rounded overflow-hidden bg-surface-hover touch-none cursor-grab active:cursor-grabbing ${
-        isDragging ? 'opacity-60 shadow-lg z-10' : ''
-      }`}
-    >
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={page.thumbnailUrl} alt="" draggable={false} className="w-full h-full object-contain select-none" />
-      <span className="absolute bottom-0.5 left-1 text-[10px] leading-none text-white bg-black/60 rounded px-1 py-0.5">
-        {index + 1}
-      </span>
-      <button
-        type="button"
-        // 드래그 손잡이와 겹쳐 있는 버튼이라, pointerdown 단계에서 이벤트가
-        // 드래그 센서로 넘어가지 않게 막아야 클릭이 드래그로 씹히지 않는다.
-        onPointerDown={(e) => e.stopPropagation()}
-        onClick={(e) => {
-          e.stopPropagation();
-          onRemove();
-        }}
-        className="absolute top-0.5 right-0.5 flex items-center justify-center w-4 h-4 rounded-full bg-black/70 text-white hover:bg-black"
-        aria-label="이 장 제외"
-      >
-        <X size={10} />
-      </button>
     </div>
   );
 }

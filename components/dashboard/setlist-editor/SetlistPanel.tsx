@@ -1,11 +1,15 @@
 'use client';
 
-import { Fragment, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { GripVertical, Trash2 } from 'lucide-react';
 import { useDroppable } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { createClient } from '@/lib/supabase/client';
+import { isPdfFile } from '@/lib/storage';
+import { getCachedSignedUrl, setCachedSignedUrl } from '@/lib/signedUrlCache';
 import SheetPreviewModal from '@/components/sheets/SheetPreviewModal';
+import SheetThumbnail from '@/components/sheets/SheetThumbnail';
 import SongFormEditor from './SongFormEditor';
 import type { LibrarySheet } from './SheetLibraryPanel';
 import type { TeamRole } from '@/types/supabase';
@@ -25,6 +29,9 @@ export interface SetlistItem {
   transposedKey: string | null;
   note: string;
   fileUrl: string | null;
+  // 목록 썸네일용 — 업로드 시점에 만들어진 첫 페이지(또는 이미지) 미리보기 경로.
+  // 라이브러리 테이블과 같은 SheetThumbnail 컴포넌트를 그대로 재사용하기 위해 필요.
+  thumbnailUrl: string | null;
   songForm: string[];
   bpm: number | null;
   // 악보 파일의 sheets.updated_at — 오프라인 캐시 버전 구분에 쓰인다.
@@ -58,8 +65,68 @@ export default function SetlistPanel({
   onUpdateBpm,
   className,
 }: SetlistPanelProps) {
+  const supabase = createClient();
   const canReorder = role === 'LEADER';
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
+  const [thumbnailUrls, setThumbnailUrls] = useState<Record<string, string>>({});
+
+  // 악보 라이브러리 테이블과 같은 방식으로 각 행의 썸네일용 signed URL을 받아온다.
+  // sessionStorage 캐시(lib/signedUrlCache)도 그대로 공유하므로, 라이브러리를 먼저
+  // 둘러본 적이 있으면 여기서 다시 요청하지 않고 캐시된 URL을 바로 쓴다.
+  useEffect(() => {
+    const previewable = items.filter(
+      (item) => item.fileUrl && (!isPdfFile(item.fileUrl) || item.thumbnailUrl)
+    );
+    if (previewable.length === 0) return;
+
+    let cancelled = false;
+
+    async function loadThumbnails() {
+      const cached: Record<string, string> = {};
+      const uncached: { sheetId: string; path: string }[] = [];
+
+      for (const item of previewable) {
+        const path = (item.thumbnailUrl ?? item.fileUrl) as string;
+        const hit = getCachedSignedUrl(path);
+        if (hit) {
+          cached[item.sheetId] = hit;
+        } else {
+          uncached.push({ sheetId: item.sheetId, path });
+        }
+      }
+
+      if (Object.keys(cached).length > 0) {
+        setThumbnailUrls((prev) => ({ ...prev, ...cached }));
+      }
+
+      if (uncached.length === 0) return;
+
+      const { data } = await supabase.storage
+        .from('sheets')
+        .createSignedUrls(uncached.map((entry) => entry.path), 60 * 60);
+
+      if (cancelled || !data) return;
+
+      setThumbnailUrls((prev) => {
+        const next = { ...prev };
+        uncached.forEach((entry, i) => {
+          const signedUrl = data[i]?.signedUrl;
+          if (signedUrl) {
+            next[entry.sheetId] = signedUrl;
+            setCachedSignedUrl(entry.path, signedUrl);
+          }
+        });
+        return next;
+      });
+    }
+
+    loadThumbnails();
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items]);
 
   const previewSheets = useMemo(
     () =>
@@ -95,6 +162,7 @@ export default function SetlistPanel({
                 item={item}
                 index={index}
                 canReorder={canReorder}
+                signedUrl={thumbnailUrls[item.sheetId]}
                 onPreview={() => setPreviewIndex(index)}
                 onRemove={() => onRemove(index)}
                 onUpdate={(patch) => onUpdate(index, patch)}
@@ -158,6 +226,7 @@ interface SortableSetlistRowProps {
   item: SetlistItem;
   index: number;
   canReorder: boolean;
+  signedUrl?: string;
   onPreview: () => void;
   onRemove: () => void;
   onUpdate: (patch: Partial<SetlistItem>) => void;
@@ -168,6 +237,7 @@ function SortableSetlistRow({
   item,
   index,
   canReorder,
+  signedUrl,
   onPreview,
   onRemove,
   onUpdate,
@@ -195,96 +265,122 @@ function SortableSetlistRow({
       <div
         {...attributes}
         {...listeners}
-        className={`border border-border rounded-lg p-3 flex flex-col gap-2 bg-surface-hover transition-shadow select-none ${
+        className={`border border-border rounded-lg p-3 flex items-stretch gap-3 bg-surface-hover transition-shadow select-none ${
           canReorder ? 'cursor-grab active:cursor-grabbing' : ''
         } ${isDragging ? 'opacity-60 shadow-lg' : ''}`}
       >
-        <div className="flex items-start gap-2">
-          <button
-            type="button"
-            data-dnd-handle
-            disabled={!canReorder}
-            title={canReorder ? '드래그해서 순서 변경' : '팀장만 순서를 변경할 수 있습니다.'}
-            aria-label={canReorder ? '드래그해서 순서 변경' : '팀장만 순서를 변경할 수 있습니다.'}
-            className={`mt-1 shrink-0 touch-none rounded ${
-              canReorder ? 'cursor-grab text-muted active:cursor-grabbing' : 'cursor-not-allowed text-muted/50'
-            }`}
-          >
-            <GripVertical size={16} />
-          </button>
-          <span className="text-sm font-semibold text-muted w-5 shrink-0">{index + 1}</span>
-          {/*
-            data-no-dnd: 이 영역에서 시작된 포인터는 드래그로 이어지지 않는다 — 탭(클릭)하면
-            항상 미리보기만 열려야 하기 때문. (버튼 대신 클릭 가능한 div를 쓰는 이유는 카드
-            안에 네이티브로 포커스 가능한 <button>이 있으면 브라우저가 드래그 시작과 클릭
-            제스처를 혼동해 드래그가 간헐적으로 씹히기 때문.)
-          */}
-          <div
-            role="button"
-            tabIndex={0}
-            data-no-dnd
-            onClick={onPreview}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') onPreview();
-            }}
-            className="flex-1 min-w-0 text-left cursor-pointer"
-          >
-            <p className="font-medium truncate hover:underline">{item.title}</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => {
-              if (confirm(`"${item.title}"을(를) 콘티에서 삭제할까요?`)) {
-                onRemove();
-              }
-            }}
-            className="shrink-0 text-muted hover:text-red-600 dark:hover:text-red-400"
-            aria-label="삭제"
-          >
-            <Trash2 size={16} />
-          </button>
+        {/*
+          썸네일 — 카드 전체(오른쪽 텍스트 블록) 높이에 맞춰 늘어난다. data-no-dnd로
+          클릭하면 드래그가 아니라 미리보기가 열리게 한다(제목 클릭과 동일).
+        */}
+        <div
+          role="button"
+          tabIndex={0}
+          data-no-dnd
+          onClick={onPreview}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') onPreview();
+          }}
+          className="shrink-0 w-20 sm:w-24 self-stretch cursor-pointer"
+        >
+          <SheetThumbnail
+            title={item.title}
+            fileUrl={item.fileUrl}
+            thumbnailUrl={item.thumbnailUrl}
+            signedUrl={signedUrl}
+            className="w-full h-full"
+            fit="contain"
+          />
         </div>
 
-        <div className="flex items-center gap-2 pl-7">
-          <label className="text-xs text-muted flex items-center gap-1">
-            Key
-            <select
-              value={item.transposedKey ?? ''}
-              onChange={(e) => onUpdate({ transposedKey: e.target.value || null })}
-              className="border border-border bg-surface rounded px-2 py-1 text-xs"
+        <div className="flex-1 min-w-0 flex flex-col gap-2">
+          <div className="flex items-start gap-2">
+            <button
+              type="button"
+              data-dnd-handle
+              disabled={!canReorder}
+              title={canReorder ? '드래그해서 순서 변경' : '팀장만 순서를 변경할 수 있습니다.'}
+              aria-label={canReorder ? '드래그해서 순서 변경' : '팀장만 순서를 변경할 수 있습니다.'}
+              className={`mt-1 shrink-0 touch-none rounded ${
+                canReorder ? 'cursor-grab text-muted active:cursor-grabbing' : 'cursor-not-allowed text-muted/50'
+              }`}
             >
-              <option value="">{item.originalKey ? `원본 (${item.originalKey})` : '원본'}</option>
-              {KEY_OPTIONS.map((key) => (
-                <option key={key} value={key}>
-                  {key}
-                </option>
-              ))}
-            </select>
-          </label>
+              <GripVertical size={16} />
+            </button>
+            <span className="text-sm font-semibold text-muted w-5 shrink-0">{index + 1}</span>
+            {/*
+              data-no-dnd: 이 영역에서 시작된 포인터는 드래그로 이어지지 않는다 — 탭(클릭)하면
+              항상 미리보기만 열려야 하기 때문. (버튼 대신 클릭 가능한 div를 쓰는 이유는 카드
+              안에 네이티브로 포커스 가능한 <button>이 있으면 브라우저가 드래그 시작과 클릭
+              제스처를 혼동해 드래그가 간헐적으로 씹히기 때문.)
+            */}
+            <div
+              role="button"
+              tabIndex={0}
+              data-no-dnd
+              onClick={onPreview}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') onPreview();
+              }}
+              className="flex-1 min-w-0 text-left cursor-pointer"
+            >
+              <p className="font-medium truncate hover:underline">{item.title}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                if (confirm(`"${item.title}"을(를) 콘티에서 삭제할까요?`)) {
+                  onRemove();
+                }
+              }}
+              className="shrink-0 text-muted hover:text-red-600 dark:hover:text-red-400"
+              aria-label="삭제"
+            >
+              <Trash2 size={16} />
+            </button>
+          </div>
 
-          <label className="text-xs text-muted flex items-center gap-1">
-            BPM
-            <input
-              type="number"
-              min={0}
-              value={item.bpm ?? ''}
-              onChange={(e) => onUpdate({ bpm: e.target.value ? Number(e.target.value) : null })}
-              onBlur={(e) => onUpdateBpm(item.sheetId, e.target.value ? Number(e.target.value) : null)}
-              placeholder="-"
-              className="w-14 border border-border bg-surface rounded px-2 py-1 text-xs"
-            />
-          </label>
+          <div className="flex items-center gap-2 pl-7">
+            <label className="text-xs text-muted flex items-center gap-1">
+              Key
+              <select
+                value={item.transposedKey ?? ''}
+                onChange={(e) => onUpdate({ transposedKey: e.target.value || null })}
+                className="border border-border bg-surface rounded px-2 py-1 text-xs"
+              >
+                <option value="">{item.originalKey ? `원본 (${item.originalKey})` : '원본'}</option>
+                {KEY_OPTIONS.map((key) => (
+                  <option key={key} value={key}>
+                    {key}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="text-xs text-muted flex items-center gap-1">
+              BPM
+              <input
+                type="number"
+                min={0}
+                value={item.bpm ?? ''}
+                onChange={(e) => onUpdate({ bpm: e.target.value ? Number(e.target.value) : null })}
+                onBlur={(e) => onUpdateBpm(item.sheetId, e.target.value ? Number(e.target.value) : null)}
+                placeholder="-"
+                className="w-14 border border-border bg-surface rounded px-2 py-1 text-xs"
+              />
+            </label>
+          </div>
+
+          <input
+            type="text"
+            value={item.note}
+            onChange={(e) => onUpdate({ note: e.target.value })}
+            placeholder="송폼 메모 (예: 전주 없이 바로 싱어 카피로 진입)"
+            className="border border-border bg-surface rounded px-2 py-1.5 text-xs ml-7"
+          />
+
+          <SongFormEditor value={item.songForm} onChange={(next) => onUpdate({ songForm: next })} />
         </div>
-
-        <input
-          type="text"
-          value={item.note}
-          onChange={(e) => onUpdate({ note: e.target.value })}
-          placeholder="송폼 메모 (예: 전주 없이 바로 싱어 카피로 진입)"
-          className="border border-border bg-surface rounded px-2 py-1.5 text-xs ml-7"
-        />
-
-        <SongFormEditor value={item.songForm} onChange={(next) => onUpdate({ songForm: next })} />
       </div>
     </div>
   );

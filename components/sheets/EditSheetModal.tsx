@@ -1,12 +1,12 @@
 'use client';
 
-import { useEffect, useRef, useState, type DragEvent as ReactDragEvent, type FormEvent } from 'react';
+import { useEffect, useState, type DragEvent as ReactDragEvent, type FormEvent } from 'react';
 import { UploadCloud, X } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { uploadSheetFile } from '@/lib/sheetUpload';
 import { isAllowedSheetFile, SHEET_FILE_ACCEPT, SHEET_FILE_TYPE_HINT } from '@/lib/fileTypes';
-import { isPdfFile as isPdfFileUrl } from '@/lib/storage';
-import { createPdfThumbnailImage } from '@/lib/pageCompose';
+import { composePagesIntoFile, expandFileToPages, revokePagePreview, type PendingPage } from '@/lib/pageCompose';
+import PageThumbStrip from './PageThumbStrip';
 import type { SheetRow } from './SheetsLibraryClient';
 
 interface EditSheetModalProps {
@@ -16,8 +16,15 @@ interface EditSheetModalProps {
   onUpdated: (sheet: SheetRow) => void;
 }
 
-function isPdfFile(file: File): boolean {
-  return file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+// 저장돼 있는 file_url의 확장자로부터 다운로드한 Blob에 붙여줄 MIME 타입을 추정한다.
+// download()가 돌려주는 Blob의 type은 스토리지 설정에 따라 비어있을 수 있어서,
+// expandFileToPages가 PDF/이미지를 구분하는 데 쓰는 타입을 직접 채워줘야 한다.
+function guessMimeType(fileUrl: string): string {
+  const ext = fileUrl.toLowerCase().split('.').pop() ?? '';
+  if (ext === 'pdf') return 'application/pdf';
+  if (ext === 'png') return 'image/png';
+  if (ext === 'webp') return 'image/webp';
+  return 'image/jpeg';
 }
 
 export default function EditSheetModal({ sheet, teamId, onClose, onUpdated }: EditSheetModalProps) {
@@ -26,91 +33,104 @@ export default function EditSheetModal({ sheet, teamId, onClose, onUpdated }: Ed
   const [title, setTitle] = useState(sheet.title);
   const [composer, setComposer] = useState(sheet.composer ?? '');
   const [key, setKey] = useState(sheet.key ?? '');
-  const [file, setFile] = useState<File | null>(null);
-  // X를 눌러 기존 파일을 삭제하기로 표시한 상태 — 저장을 눌러야 실제로 반영되고,
-  // 그 전까지는 X를 다시 눌러 취소(원래 파일로 복구)할 수 있다.
-  const [removeExisting, setRemoveExisting] = useState(false);
   const [dropActive, setDropActive] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // 지금 등록되어 있는 파일의 미리보기 — 파일을 새로 고르지 않았을 때 "기존 파일이
-  // 이거다"를 보여준다. PDF인데 아직 썸네일이 없는 경우(백필 전)엔 signed url을
-  // 받을 대상이 없으니 그대로 두고, 렌더링에서 PDF 배지로 대체한다.
-  const [existingPreviewUrl, setExistingPreviewUrl] = useState<string | null>(null);
-
-  // 새로 고른 파일의 미리보기 — 이미지면 바로, PDF면 첫 페이지를 렌더링해서 보여준다.
-  const [newPreviewUrl, setNewPreviewUrl] = useState<string | null>(null);
-  const [newPreviewLoading, setNewPreviewLoading] = useState(false);
+  // 낱장 목록 — 기존 파일을 페이지 단위로 펼친 뒤, 새 악보 추가 화면과 같은
+  // 방식으로 순서를 바꾸거나 특정 페이지만 뺄 수 있게 한다. 사용자가 실제로
+  // 손댄 적이 없으면(pagesDirty === false) 저장 시 파일을 건드리지 않고
+  // 기존 file_url/thumbnail_url을 그대로 둔다 — 불러오기가 실패했다고 해서
+  // 파일이 삭제되는 일이 없도록 하기 위함이다.
+  const [pages, setPages] = useState<PendingPage[]>([]);
+  const [pagesLoading, setPagesLoading] = useState(true);
+  const [pagesDirty, setPagesDirty] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+  const [expanding, setExpanding] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
 
-    async function loadExistingPreview() {
-      if (!sheet.file_url) return;
-      const previewPath = sheet.thumbnail_url ?? (!isPdfFileUrl(sheet.file_url) ? sheet.file_url : null);
-      if (!previewPath) return;
+    async function loadExistingPages() {
+      if (!sheet.file_url) {
+        setPagesLoading(false);
+        return;
+      }
 
-      const { data } = await supabase.storage.from('sheets').createSignedUrl(previewPath, 60 * 60);
-      if (!cancelled && data?.signedUrl) setExistingPreviewUrl(data.signedUrl);
+      setPagesLoading(true);
+      setLoadError(false);
+      try {
+        const { data, error: downloadError } = await supabase.storage.from('sheets').download(sheet.file_url);
+        if (downloadError || !data) throw downloadError ?? new Error('download failed');
+
+        const fileName = sheet.file_url.split('/').pop() || 'sheet';
+        const existingFile = new File([data], fileName, { type: guessMimeType(sheet.file_url) });
+        const expanded = await expandFileToPages(existingFile);
+        if (!cancelled) setPages(expanded);
+      } catch {
+        if (!cancelled) setLoadError(true);
+      } finally {
+        if (!cancelled) setPagesLoading(false);
+      }
     }
 
-    loadExistingPreview();
+    loadExistingPages();
     return () => {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => {
-    if (!file) {
-      setNewPreviewUrl(null);
-      return;
+  async function addFiles(files: File[]) {
+    // 기존 파일의 페이지를 아직 불러오는 중이면(비동기 다운로드 진행 중) 그 결과가
+    // 나중에 pages를 통째로 덮어써버려 방금 추가한 페이지가 사라질 수 있으므로,
+    // 로딩이 끝날 때까지는 새 페이지 추가를 받지 않는다.
+    if (pagesLoading) return;
+
+    const valid = files.filter((f) => isAllowedSheetFile(f));
+    if (valid.length < files.length) setError(SHEET_FILE_TYPE_HINT);
+    else setError(null);
+    if (valid.length === 0) return;
+
+    setExpanding(true);
+    try {
+      const expanded = await Promise.all(valid.map(expandFileToPages));
+      setPages((prev) => [...prev, ...expanded.flat()]);
+      setPagesDirty(true);
+    } catch {
+      setError('파일을 불러오지 못했습니다.');
+    } finally {
+      setExpanding(false);
     }
-
-    let cancelled = false;
-    let objectUrl: string | null = null;
-    setNewPreviewLoading(true);
-
-    async function buildPreview() {
-      if (isPdfFile(file!)) {
-        const thumb = await createPdfThumbnailImage(file!);
-        if (thumb) objectUrl = URL.createObjectURL(thumb);
-      } else {
-        objectUrl = URL.createObjectURL(file!);
-      }
-      if (!cancelled) {
-        setNewPreviewUrl(objectUrl);
-        setNewPreviewLoading(false);
-      }
-    }
-
-    buildPreview();
-
-    return () => {
-      cancelled = true;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
-  }, [file]);
-
-  function selectFile(selected: File | null) {
-    if (selected && !isAllowedSheetFile(selected)) {
-      setError(SHEET_FILE_TYPE_HINT);
-      setFile(null);
-      return;
-    }
-    setError(null);
-    setFile(selected);
-    // 새 파일을 고르면(또는 선택을 취소하면) 삭제 표시는 의미가 없어지므로 함께 되돌린다.
-    setRemoveExisting(false);
   }
 
-  function handleDropZoneDrop(e: ReactDragEvent<HTMLDivElement>) {
+  function removePage(id: string) {
+    setPages((prev) => {
+      const target = prev.find((p) => p.id === id);
+      if (target) revokePagePreview(target);
+      return prev.filter((p) => p.id !== id);
+    });
+    setPagesDirty(true);
+  }
+
+  function removeAllPages() {
+    setPages((prev) => {
+      prev.forEach(revokePagePreview);
+      return [];
+    });
+    setPagesDirty(true);
+  }
+
+  function handleReorder(next: PendingPage[]) {
+    setPages(next);
+    setPagesDirty(true);
+  }
+
+  function handleDropZoneDrop(e: ReactDragEvent<HTMLLabelElement>) {
     e.preventDefault();
     setDropActive(false);
-    const dropped = e.dataTransfer.files?.[0] ?? null;
-    if (dropped) selectFile(dropped);
+    const dropped = Array.from(e.dataTransfer.files ?? []);
+    if (dropped.length > 0) addFiles(dropped);
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -120,22 +140,29 @@ export default function EditSheetModal({ sheet, teamId, onClose, onUpdated }: Ed
 
     let fileFields: { file_url: string | null; thumbnail_url: string | null } | null = null;
 
-    if (file) {
-      if (!isAllowedSheetFile(file)) {
-        setLoading(false);
-        setError(SHEET_FILE_TYPE_HINT);
-        return;
-      }
+    // 페이지를 하나라도 건드렸을 때만 파일을 다시 합쳐서 올린다 — 손대지
+    // 않았다면(로딩 실패로 pages가 비어 있는 경우 포함) 기존 파일은 그대로 둔다.
+    if (pagesDirty) {
+      if (pages.length === 0) {
+        fileFields = { file_url: null, thumbnail_url: null };
+      } else {
+        let composedFile: File;
+        try {
+          composedFile = await composePagesIntoFile(pages);
+        } catch {
+          setLoading(false);
+          setError('페이지를 합치지 못했습니다.');
+          return;
+        }
 
-      const { data: uploadedFile, error: uploadError } = await uploadSheetFile(supabase, teamId, file);
-      if (uploadError || !uploadedFile) {
-        setLoading(false);
-        setError(uploadError ?? '파일을 업로드하지 못했습니다.');
-        return;
+        const { data: uploadedFile, error: uploadError } = await uploadSheetFile(supabase, teamId, composedFile);
+        if (uploadError || !uploadedFile) {
+          setLoading(false);
+          setError(uploadError ?? '파일을 업로드하지 못했습니다.');
+          return;
+        }
+        fileFields = { file_url: uploadedFile.filePath, thumbnail_url: uploadedFile.thumbnailPath };
       }
-      fileFields = { file_url: uploadedFile.filePath, thumbnail_url: uploadedFile.thumbnailPath };
-    } else if (removeExisting) {
-      fileFields = { file_url: null, thumbnail_url: null };
     }
 
     const { data: updated, error: updateError } = await supabase
@@ -217,87 +244,77 @@ export default function EditSheetModal({ sheet, teamId, onClose, onUpdated }: Ed
           </div>
 
           <div className="flex flex-col gap-1 text-sm">
-            파일 교체 (선택, PDF/PNG/JPG/WEBP)
-            <div
-              onClick={() => fileInputRef.current?.click()}
+            악보 파일 (PDF/PNG/JPG/WEBP)
+            <label
               onDragOver={(e) => {
                 e.preventDefault();
-                setDropActive(true);
+                if (!pagesLoading) setDropActive(true);
               }}
               onDragLeave={() => setDropActive(false)}
               onDrop={handleDropZoneDrop}
-              className={`border border-dashed border-border rounded px-3 py-4 flex flex-col items-center gap-2 text-muted cursor-pointer ${
-                dropActive ? 'border-accent bg-surface-hover' : ''
-              }`}
+              className={`border border-dashed border-border rounded px-3 py-4 flex flex-col items-center gap-2 text-muted ${
+                pagesLoading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+              } ${dropActive ? 'border-accent bg-surface-hover' : ''}`}
             >
-              <div className="relative shrink-0 w-16 h-24 rounded overflow-hidden border border-border bg-surface-hover flex items-center justify-center">
-                {file ? (
-                  newPreviewLoading ? (
-                    <span className="text-[10px] text-muted px-1 text-center">미리보기 생성 중...</span>
-                  ) : newPreviewUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={newPreviewUrl} alt="" className="w-full h-full object-contain" />
-                  ) : (
-                    <span className="text-red-500 dark:text-red-400 text-[10px] font-semibold">PDF</span>
-                  )
-                ) : removeExisting ? (
-                  <span className="text-[10px] text-muted px-1 text-center">삭제 예정</span>
-                ) : existingPreviewUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={existingPreviewUrl} alt="" className="w-full h-full object-contain" />
-                ) : sheet.file_url && isPdfFileUrl(sheet.file_url) ? (
-                  <span className="text-red-500 dark:text-red-400 text-[10px] font-semibold">PDF</span>
-                ) : (
-                  <UploadCloud size={20} />
-                )}
-
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (file || removeExisting) {
-                      // 새 파일 선택 취소, 또는 삭제 예정 취소 — 둘 다 "원래 파일로 복구".
-                      setFile(null);
-                      setRemoveExisting(false);
-                    } else if (sheet.file_url) {
-                      setRemoveExisting(true);
-                    } else {
-                      fileInputRef.current?.click();
-                    }
-                  }}
-                  className="absolute top-0.5 right-0.5 flex items-center justify-center w-4 h-4 rounded-full bg-black/70 text-white hover:bg-black"
-                  aria-label={file || removeExisting ? '취소하고 기존 파일 유지' : '파일 삭제'}
-                >
-                  <X size={10} />
-                </button>
-              </div>
-
+              <UploadCloud size={20} />
               <span className="text-xs text-center">
-                {file
-                  ? file.name
-                  : removeExisting
-                    ? '저장하면 파일이 삭제됩니다'
-                    : '끌어다 놓거나 클릭해서 선택하세요'}
-                {!file && !removeExisting && (
+                {pagesLoading ? (
+                  '기존 파일을 불러오는 중이에요...'
+                ) : (
                   <>
+                    끌어다 놓거나 클릭해서 페이지를 추가하세요
                     <br />
-                    선택하지 않으면 기존 파일이 유지됩니다.
+                    기존 페이지 뒤에 추가됩니다 (PDF 여러 페이지 가능)
                   </>
                 )}
               </span>
-
               <input
-                ref={fileInputRef}
                 type="file"
+                multiple
                 accept={SHEET_FILE_ACCEPT}
+                disabled={pagesLoading}
                 onChange={(e) => {
-                  const selected = e.target.files?.[0] ?? null;
+                  const selected = Array.from(e.target.files ?? []);
                   e.target.value = '';
-                  if (selected) selectFile(selected);
+                  if (selected.length > 0) addFiles(selected);
                 }}
                 className="hidden"
               />
-            </div>
+            </label>
+
+            {pagesLoading && <p className="text-xs text-muted">기존 파일을 불러오는 중...</p>}
+            {expanding && <p className="text-xs text-muted">페이지를 불러오는 중...</p>}
+
+            {loadError && !pagesLoading && (
+              <p className="text-xs text-amber-600 dark:text-amber-400">
+                기존 파일의 페이지를 불러오지 못했습니다. 그대로 두면 기존 파일이 유지되고, 새 파일을 추가하면
+                기존 파일은 새로 추가한 페이지로 교체됩니다.
+              </p>
+            )}
+
+            {!pagesLoading && pages.length > 0 && (
+              <>
+                <div className="flex items-center justify-between mt-1">
+                  <p className="text-xs text-muted">
+                    {pages.length}장{pagesDirty ? ' · 변경됨' : ''} — 손잡이로 순서를 바꾸거나 X로 제외할 수 있어요
+                  </p>
+                  <button
+                    type="button"
+                    onClick={removeAllPages}
+                    className="text-xs text-red-600 dark:text-red-400 hover:underline shrink-0 ml-2"
+                  >
+                    전체 삭제
+                  </button>
+                </div>
+                <PageThumbStrip pages={pages} onReorder={handleReorder} onRemove={removePage} />
+              </>
+            )}
+
+            {!pagesLoading && !loadError && pages.length === 0 && (
+              <p className="text-xs text-muted mt-1">
+                {pagesDirty ? '저장하면 파일이 삭제됩니다.' : '등록된 파일이 없습니다.'}
+              </p>
+            )}
           </div>
 
           {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
