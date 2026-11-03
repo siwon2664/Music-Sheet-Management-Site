@@ -96,7 +96,7 @@ export default function TermsAgreementModal({
   const canAgree = agreeTerms && agreePrivacy;
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
+    <div role="dialog" aria-modal="true" aria-label="약관 동의" className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
       <div className="bg-surface text-foreground rounded-lg shadow-lg w-full max-w-lg max-h-[85vh] flex flex-col">
         <div className="p-4 border-b border-border">
           <h2 className="text-lg font-semibold">약관 동의</h2>

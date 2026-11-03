@@ -1,9 +1,10 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useDeferredValue, useMemo, useState } from 'react';
 import { ChevronDown, ChevronUp, GripVertical, Plus, Search } from 'lucide-react';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
 import { matchesSearch } from '@/lib/hangul';
+import { keyFromTitle } from '@/lib/setlist';
 import SheetPreviewModal from '@/components/sheets/SheetPreviewModal';
 
 // 콘티 목록에 있던 곡을 여기로 끌어다 놓으면 삭제를 물어보는 드롭 영역 id.
@@ -43,6 +44,8 @@ export default function SheetLibraryPanel({
 }: SheetLibraryPanelProps) {
   const { setNodeRef: setLibraryDropRef } = useDroppable({ id: LIBRARY_DROP_ID });
   const [query, setQuery] = useState('');
+  // 곡이 수백 개면 필터링과 렌더링이 타이핑을 막으므로 입력보다 늦게 따라오게 한다.
+  const deferredQuery = useDeferredValue(query);
   const [activeTag, setActiveTag] = useState<string | null>(null);
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
   const [collapsed, setCollapsed] = useState(false);
@@ -58,9 +61,9 @@ export default function SheetLibraryPanel({
   const filtered = useMemo(() => {
     return sheets.filter((sheet) => {
       if (activeTag && !sheet.tags.includes(activeTag)) return false;
-      return matchesSearch(sheet.title, query);
+      return matchesSearch(sheet.title, deferredQuery);
     });
-  }, [sheets, query, activeTag]);
+  }, [sheets, deferredQuery, activeTag]);
 
   return (
     <section
@@ -138,7 +141,7 @@ export default function SheetLibraryPanel({
       </div>
 
       {!collapsed && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 overflow-y-auto max-h-[65vh] pr-1">
+        <div className="flex flex-col gap-2 overflow-y-auto max-h-[65vh] pr-1">
           {filtered.map((sheet, index) => (
             <DraggableSheetCard
               key={sheet.id}
@@ -150,7 +153,7 @@ export default function SheetLibraryPanel({
           ))}
 
           {filtered.length === 0 && (
-            <p className="text-sm text-muted col-span-full text-center py-8">검색 결과가 없습니다.</p>
+            <p className="text-sm text-muted text-center py-8">검색 결과가 없습니다.</p>
           )}
         </div>
       )}
@@ -185,15 +188,18 @@ function DraggableSheetCard({ sheet, added, onAdd, onPreview }: DraggableSheetCa
     disabled: added,
   });
 
+  const sheetKey = sheet.key ?? keyFromTitle(sheet.title);
+  const details = [sheet.composer, sheet.bpm ? `${sheet.bpm} BPM` : null].filter(Boolean).join(' · ');
+
   return (
     <div
       ref={setNodeRef}
       className={[
-        'border border-border rounded-lg p-3 flex flex-col gap-2 bg-surface-hover transition-opacity',
+        'border border-border rounded-lg px-3 py-2 flex flex-col gap-2 bg-surface-hover transition-opacity',
         isDragging ? 'opacity-40' : '',
       ].join(' ')}
     >
-      <div className="flex items-start gap-2">
+      <div className="flex items-center gap-2">
         <button
           type="button"
           data-dnd-handle
@@ -203,7 +209,7 @@ function DraggableSheetCard({ sheet, added, onAdd, onPreview }: DraggableSheetCa
           aria-label={added ? '이미 추가된 악보입니다.' : '드래그해서 콘티에 추가'}
           title={added ? '이미 추가된 악보입니다.' : '드래그해서 콘티에 추가'}
           className={[
-            'mt-0.5 shrink-0 touch-none rounded',
+            'shrink-0 touch-none rounded',
             added ? 'text-muted/40 cursor-not-allowed' : 'text-muted cursor-grab active:cursor-grabbing',
           ].join(' ')}
         >
@@ -223,22 +229,27 @@ function DraggableSheetCard({ sheet, added, onAdd, onPreview }: DraggableSheetCa
           }}
           className="flex-1 min-w-0 cursor-pointer"
         >
-          <p className="font-medium leading-snug truncate hover:underline">{sheet.title}</p>
-          <p className="text-xs text-muted mt-0.5 truncate">
-            {[sheet.composer, sheet.key, sheet.bpm ? `${sheet.bpm} BPM` : null]
-              .filter(Boolean)
-              .join(' · ')}
+          <p title={sheet.title} className="text-sm font-medium leading-snug truncate hover:underline">
+            {sheet.title}
           </p>
+          {details && <p className="text-xs text-muted mt-0.5 truncate">{details}</p>}
         </div>
+
+        {sheetKey && (
+          <span className="shrink-0 text-[11px] font-semibold border border-border rounded px-1.5 py-0.5 bg-surface">
+            {sheetKey}
+          </span>
+        )}
 
         <button
           type="button"
           onClick={onAdd}
           disabled={added}
+          aria-label={added ? `${sheet.title} 추가됨` : `${sheet.title} 콘티에 추가`}
           className="shrink-0 flex items-center gap-1 text-xs font-medium border border-border rounded px-2 py-1 hover:bg-surface disabled:opacity-40 disabled:cursor-not-allowed"
         >
           <Plus size={14} />
-          {added ? '추가됨' : '콘티에 추가'}
+          {added ? '추가됨' : '추가'}
         </button>
       </div>
 

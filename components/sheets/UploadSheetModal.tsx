@@ -184,7 +184,7 @@ export default function UploadSheetModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+    <div role="dialog" aria-modal="true" aria-label="새 악보 추가" className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
       <div className="bg-surface text-foreground rounded-lg shadow-lg w-full max-w-sm p-6 relative">
         <button
           type="button"

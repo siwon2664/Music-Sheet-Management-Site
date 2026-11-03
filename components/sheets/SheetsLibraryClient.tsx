@@ -673,7 +673,7 @@ export default function SheetsLibraryClient({ teamId, teamName, role, initialShe
       )}
 
       {showDownloadModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+        <div role="dialog" aria-modal="true" aria-label="악보 다운로드" className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="bg-surface text-foreground rounded-lg shadow-lg w-full max-w-sm p-6">
             {downloadMode === null ? (
               <>

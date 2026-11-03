@@ -3,6 +3,8 @@
 // 헬퍼들. R2는 Supabase Storage처럼 RLS로 권한을 걸 수 없어서, 읽기/쓰기/삭제 전부
 // 서버에서 팀 멤버십을 확인하는 이 라우트들을 거쳐야 한다.
 
+import { getCachedSignedUrl, setCachedSignedUrl } from './signedUrlCache';
+
 async function postJson<T>(url: string, body: unknown): Promise<T> {
   const res = await fetch(url, {
     method: 'POST',
@@ -26,6 +28,19 @@ export async function getSignedSheetUrls(paths: string[]): Promise<(string | nul
 export async function getSignedSheetUrl(path: string): Promise<string | null> {
   const [url] = await getSignedSheetUrls([path]);
   return url ?? null;
+}
+
+// 미리 받아 두는 용도라 실패해도 조용히 넘어간다. 쓰는 쪽이 캐시에 없으면 다시 요청한다.
+export async function prefetchSignedUrls(paths: string[]): Promise<void> {
+  const missing = paths.filter((path) => !getCachedSignedUrl(path));
+  try {
+    const urls = await getSignedSheetUrls(missing);
+    urls.forEach((url, i) => {
+      if (url) setCachedSignedUrl(missing[i], url);
+    });
+  } catch {
+    // 위 설명 참고
+  }
 }
 
 export async function removeSheetFiles(paths: string[]): Promise<void> {

@@ -5,6 +5,7 @@ import { Check } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { isPdfFile } from '@/lib/storage';
 import { cacheDrawing, cacheSheetFile, getCachedSheetFile } from '@/lib/offlineSheetCache';
+import { keyFromTitle } from '@/lib/setlist';
 import { getSignedSheetUrls } from '@/lib/sheetStorage';
 import PdfPageViewer from '@/components/sheets/PdfPageViewer';
 import DrawingLayer from '@/components/sheets/DrawingLayer';
@@ -31,10 +32,13 @@ export default function PerformanceMode({ items, teamId, initialIndex = 0, onClo
   const [readyIds, setReadyIds] = useState<Set<string>>(new Set());
 
   const item = items[index];
-  const effectiveKey = item ? item.transposedKey ?? item.originalKey : null;
+  const effectiveKey = item ? item.transposedKey ?? item.originalKey ?? keyFromTitle(item.title) : null;
 
+  const rootRef = useRef<HTMLDivElement>(null);
   const dragStartRef = useRef<{ x: number; y: number } | null>(null);
   const objectUrlsRef = useRef<Set<string>>(new Set());
+  // 불러오기를 새로 시작하거나(다시 시도) 화면을 닫으면 값이 바뀌어, 진행 중이던 이전 작업을 무효로 만든다.
+  const preloadRunRef = useRef(0);
 
   function goPrev() {
     setIndex((prev) => Math.max(0, prev - 1));
@@ -96,6 +100,22 @@ export default function PerformanceMode({ items, teamId, initialIndex = 0, onClo
     };
   }, []);
 
+  // 연주 중에는 뒤에 있는 편집 화면으로 포커스가 가지 않게 한다. 포커스가 "연주 시작"
+  // 버튼에 남아 있으면 스페이스로 곡을 넘길 때 그 버튼까지 눌리기 때문이다.
+  useEffect(() => {
+    const inerted: Element[] = [];
+    for (let node: Element | null = rootRef.current; node?.parentElement; node = node.parentElement) {
+      for (const sibling of Array.from(node.parentElement.children)) {
+        if (sibling !== node && !sibling.hasAttribute('inert') && sibling.tagName !== 'SCRIPT') {
+          sibling.setAttribute('inert', '');
+          inerted.push(sibling);
+        }
+      }
+    }
+    rootRef.current?.focus();
+    return () => inerted.forEach((element) => element.removeAttribute('inert'));
+  }, []);
+
   // 전체화면 진입 요청은 호출 측(버튼 클릭 핸들러)에서 이미 수행한다.
   // 여기서는 전체화면 종료를 감지해 모드를 닫고, 언마운트 시 전체화면을 해제한다.
   useEffect(() => {
@@ -139,23 +159,21 @@ export default function PerformanceMode({ items, teamId, initialIndex = 0, onClo
   // 매번 새로 네트워크를 타면(또는 PDF를 처음 열 때 디코딩하면) 그때 딜레이가
   // 느껴지므로, 그 비용을 전부 "시작" 시점(로딩 화면)으로 앞당겨서 치르고
   // 연주 중에는 이미 받아둔 로컬 URL만 쓰게 한다.
-  useEffect(() => {
-    let cancelled = false;
+  function preload(targets: (SetlistItem & { fileUrl: string })[]) {
+    const run = ++preloadRunRef.current;
+    const isCancelled = () => run !== preloadRunRef.current;
 
     async function preloadAll() {
-      const targets = items.filter(
-        (it): it is SetlistItem & { fileUrl: string } => !!it.fileUrl
-      );
       if (targets.length === 0) return;
 
-      let signedUrlMap: Record<string, string> = {};
+      const signedUrlMap: Record<string, string> = {};
 
       // 오프라인이면 signed URL 발급 자체가 의미 없으니 건너뛰고 곧바로
       // 곡마다 캐시 폴백을 시도한다.
       if (navigator.onLine) {
         try {
           const urls = await getSignedSheetUrls(targets.map((it) => it.fileUrl));
-          if (!cancelled) {
+          if (!isCancelled()) {
             targets.forEach((it, i) => {
               const url = urls[i];
               if (url) signedUrlMap[it.id] = url;
@@ -166,7 +184,7 @@ export default function PerformanceMode({ items, teamId, initialIndex = 0, onClo
         }
       }
 
-      if (cancelled) return;
+      if (isCancelled()) return;
 
       await Promise.all(
         targets.map(async (it) => {
@@ -182,7 +200,7 @@ export default function PerformanceMode({ items, teamId, initialIndex = 0, onClo
             }
           }
 
-          if (cancelled) return;
+          if (isCancelled()) return;
 
           if (blob) {
             // 온라인 연습 때 콘티를 한 번 훑어보면, 공연 중 네트워크가 끊겨도
@@ -192,12 +210,16 @@ export default function PerformanceMode({ items, teamId, initialIndex = 0, onClo
             blob = await getCachedSheetFile(it.sheetId, it.updatedAt);
           }
 
-          if (cancelled) return;
+          if (isCancelled()) return;
 
           if (blob) {
             const objectUrl = URL.createObjectURL(blob);
             objectUrlsRef.current.add(objectUrl);
             setLocalUrls((prev) => ({ ...prev, [it.id]: objectUrl }));
+          } else if (url && !isPdfFile(it.fileUrl)) {
+            // fetch만 막혔을 수 있다(R2 CORS 등). 이미지는 <img>로는 열리므로 서명 URL로
+            // 바로 보여준다. 다만 파일을 받은 게 아니라 오프라인 저장은 되지 않는다.
+            setLocalUrls((prev) => ({ ...prev, [it.id]: url }));
           } else {
             setItemErrors((prev) => ({
               ...prev,
@@ -215,12 +237,23 @@ export default function PerformanceMode({ items, teamId, initialIndex = 0, onClo
     }
 
     preloadAll();
+  }
+
+  useEffect(() => {
+    preload(items.filter((it): it is SetlistItem & { fileUrl: string } => !!it.fileUrl));
 
     return () => {
-      cancelled = true;
+      preloadRunRef.current++;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  function retryFailed() {
+    const failed = items.filter((it): it is SetlistItem & { fileUrl: string } => !!it.fileUrl && !!itemErrors[it.id]);
+    setItemErrors({});
+    setReadyIds((prev) => new Set(Array.from(prev).filter((id) => !failed.some((it) => it.id === id))));
+    preload(failed);
+  }
 
   // 언마운트(연주 모드 종료) 시 만들어둔 blob URL을 정리한다.
   useEffect(() => {
@@ -282,7 +315,7 @@ export default function PerformanceMode({ items, teamId, initialIndex = 0, onClo
   const loading = validItems.length > 0 && readyIds.size < validItems.length;
 
   const cachedSheetIds = useMemo(
-    () => new Set(validItems.filter((it) => localUrls[it.id]).map((it) => it.sheetId)),
+    () => new Set(validItems.filter((it) => localUrls[it.id]?.startsWith('blob:')).map((it) => it.sheetId)),
     [validItems, localUrls]
   );
 
@@ -297,7 +330,14 @@ export default function PerformanceMode({ items, teamId, initialIndex = 0, onClo
   const cachedCount = cachedSheetIds.size;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black flex flex-col touch-none">
+    <div
+      ref={rootRef}
+      tabIndex={-1}
+      role="dialog"
+      aria-modal="true"
+      aria-label="연주 모드"
+      className="fixed inset-0 z-50 bg-black flex flex-col touch-none outline-none"
+    >
       <div className="flex items-stretch border-b border-white/15 text-white/90">
         {/* 왼쪽은 비워둔다 — 전체화면 상태에서 브라우저가 자체적으로 띄우는
             전체화면 종료 버튼이 이 자리(좌상단)에 겹쳐서 뜨기 때문에, 우리
@@ -317,7 +357,7 @@ export default function PerformanceMode({ items, teamId, initialIndex = 0, onClo
             <span className="ml-2 text-white/30">· 오프라인 저장 {cachedCount}/{items.length}</span>
           </p>
         </div>
-        <div className="shrink-0 flex items-center px-4 py-3">
+        <div className="shrink-0 w-24 flex items-center justify-end px-4 py-3">
           <div className="text-right">
             {effectiveKey && <p className="text-sm font-semibold">Key {effectiveKey}</p>}
             {item?.bpm && <p className="text-xs text-white/50 mt-0.5">{item.bpm} BPM</p>}
@@ -348,7 +388,20 @@ export default function PerformanceMode({ items, teamId, initialIndex = 0, onClo
                 불러오는 중... ({readyIds.size}/{validItems.length})
               </p>
             )}
-            {!loading && error && <p className="text-sm text-red-400 px-6 text-center">{error}</p>}
+            {!loading && error && (
+              <div className="flex flex-col items-center gap-3 px-6">
+                <p className="text-sm text-red-400 text-center">{error}</p>
+                {currentError && (
+                  <button
+                    type="button"
+                    onClick={retryFailed}
+                    className="border border-white/30 rounded px-4 py-2 text-sm text-white hover:bg-white/10"
+                  >
+                    다시 시도
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         )}
 

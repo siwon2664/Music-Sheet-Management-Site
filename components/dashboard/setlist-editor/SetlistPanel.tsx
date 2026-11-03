@@ -5,6 +5,7 @@ import { GripVertical, Trash2 } from 'lucide-react';
 import { useDroppable } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { keyFromTitle } from '@/lib/setlist';
 import { isPdfFile } from '@/lib/storage';
 import { getCachedSignedUrl, setCachedSignedUrl } from '@/lib/signedUrlCache';
 import { getSignedSheetUrls } from '@/lib/sheetStorage';
@@ -14,7 +15,8 @@ import SongFormEditor from './SongFormEditor';
 import type { LibrarySheet } from './SheetLibraryPanel';
 import type { TeamRole } from '@/types/supabase';
 
-const KEY_OPTIONS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+const MAJOR_KEYS = ['C', 'C#', 'Db', 'D', 'D#', 'Eb', 'E', 'F', 'F#', 'Gb', 'G', 'G#', 'Ab', 'A', 'A#', 'Bb', 'B'];
+const MINOR_KEYS = ['Cm', 'C#m', 'Dm', 'D#m', 'Ebm', 'Em', 'Fm', 'F#m', 'Gm', 'G#m', 'Am', 'A#m', 'Bbm', 'Bm'];
 
 // 라이브러리에서 곡을 끌어와 목록 맨 끝(또는 빈 목록)에 놓을 때 쓰는 드롭 영역 id.
 // DndContext는 이제 SetlistEditor가 갖고 있어서, 그쪽의 onDragEnd에서도 같은 id를
@@ -240,7 +242,7 @@ function SortableSetlistRow({
   onUpdate,
   onUpdateBpm,
 }: SortableSetlistRowProps) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({
     id: item.id,
     disabled: !canReorder,
   });
@@ -249,18 +251,22 @@ function SortableSetlistRow({
     transform: CSS.Transform.toString(transform),
     transition,
   };
+  const originalKey = item.originalKey ?? keyFromTitle(item.title);
 
   return (
     <div ref={setNodeRef} style={style} className={`mb-2 ${isDragging ? 'relative z-10' : 'relative'}`}>
       {/*
-        attributes/listeners를 카드 전체에 건다 — 버튼·입력창(select/input/textarea/a/label)이나
+        listeners를 카드 전체에 건다 — 버튼·입력창(select/input/textarea/a/label)이나
         data-no-dnd가 붙은 영역(곡 제목: 클릭하면 미리보기만 열려야 한다)에서 시작된 포인터는
         SetlistEditor의 커스텀 센서가 걸러내므로, 카드의 나머지 영역(여백, 순서 번호 등) 어디를
         길게 누르든 드래그를 시작할 수 있다. 그립 아이콘은 data-dnd-handle로 예외 처리해서
         (버튼 태그라도) 여전히 전용 손잡이로 쓸 수 있다.
+
+        키보드 드래그는 그립 버튼에서만 시작된다. setActivatorNodeRef가 없으면 dnd-kit이 카드 안
+        어디서 누른 스페이스든 드래그로 받아서, 메모 입력창의 띄어쓰기가 먹히는 문제가 있었다.
+        attributes(role, tabIndex 등)도 같은 이유로 카드가 아니라 그립 버튼에 건다.
       */}
       <div
-        {...attributes}
         {...listeners}
         className={`border border-border rounded-lg p-3 flex items-stretch gap-3 bg-surface-hover transition-shadow select-none ${
           canReorder ? 'cursor-grab active:cursor-grabbing' : ''
@@ -293,6 +299,8 @@ function SortableSetlistRow({
         <div className="flex-1 min-w-0 flex flex-col gap-2">
           <div className="flex items-start gap-2">
             <button
+              {...attributes}
+              ref={setActivatorNodeRef}
               type="button"
               data-dnd-handle
               disabled={!canReorder}
@@ -345,12 +353,21 @@ function SortableSetlistRow({
                 onChange={(e) => onUpdate({ transposedKey: e.target.value || null })}
                 className="border border-border bg-surface rounded px-2 py-1 text-xs"
               >
-                <option value="">{item.originalKey ? `원본 (${item.originalKey})` : '원본'}</option>
-                {KEY_OPTIONS.map((key) => (
-                  <option key={key} value={key}>
-                    {key}
-                  </option>
-                ))}
+                <option value="">원본{originalKey ? ` (${originalKey})` : ''}</option>
+                <optgroup label="메이저">
+                  {MAJOR_KEYS.map((key) => (
+                    <option key={key} value={key}>
+                      {key}
+                    </option>
+                  ))}
+                </optgroup>
+                <optgroup label="마이너">
+                  {MINOR_KEYS.map((key) => (
+                    <option key={key} value={key}>
+                      {key}
+                    </option>
+                  ))}
+                </optgroup>
               </select>
             </label>
 

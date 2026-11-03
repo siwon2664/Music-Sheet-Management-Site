@@ -86,6 +86,42 @@ export default function SongFormEditor({ value, onChange }: SongFormEditorProps)
           data-no-dnd
           className="mt-2 border border-border rounded-lg p-2.5 bg-surface-hover flex flex-col gap-2.5"
         >
+          {/* 프리셋을 위에 둔다. 현재 순서가 위에 있으면 칩이 늘어날 때 버튼이 밀려서, 연달아 누르면 엉뚱한 버튼이 눌린다. */}
+          <div className="flex flex-col gap-1.5">
+            {PRESET_GROUPS.map((group) => (
+              <div key={group.label} className="flex flex-wrap items-center gap-1">
+                <span className="text-[10px] text-muted w-8 shrink-0">{group.label}</span>
+                {group.items.map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => addMarker(preset)}
+                    className="text-xs border border-border rounded px-1.5 py-0.5 bg-surface hover:bg-surface-hover"
+                  >
+                    {preset}
+                  </button>
+                ))}
+              </div>
+            ))}
+          </div>
+
+          <form onSubmit={handleCustomSubmit} className="flex items-center gap-1.5">
+            <input
+              type="text"
+              value={customText}
+              onChange={(e) => setCustomText(e.target.value)}
+              placeholder="직접 입력 (예: 코러스)"
+              className="flex-1 min-w-0 border border-border bg-surface rounded px-2 py-1 text-xs"
+            />
+            <button
+              type="submit"
+              className="flex items-center gap-1 text-xs border border-border rounded px-2 py-1 bg-surface hover:bg-surface-hover shrink-0"
+            >
+              <Plus size={12} />
+              추가
+            </button>
+          </form>
+
           <div className="bg-surface border border-border rounded-lg p-2 flex flex-col gap-1.5">
             <span className="text-[10px] font-medium text-muted">현재 순서</span>
             {value.length > 0 ? (
@@ -122,44 +158,9 @@ export default function SongFormEditor({ value, onChange }: SongFormEditorProps)
                 ))}
               </div>
             ) : (
-              <p className="text-[11px] text-muted">아래에서 골라 순서를 만들어보세요</p>
+              <p className="text-[11px] text-muted">위에서 골라 순서를 만들어보세요</p>
             )}
           </div>
-
-          <div className="flex flex-col gap-1.5 border-t border-border pt-2">
-            {PRESET_GROUPS.map((group) => (
-              <div key={group.label} className="flex flex-wrap items-center gap-1">
-                <span className="text-[10px] text-muted w-8 shrink-0">{group.label}</span>
-                {group.items.map((preset) => (
-                  <button
-                    key={preset}
-                    type="button"
-                    onClick={() => addMarker(preset)}
-                    className="text-xs border border-border rounded px-1.5 py-0.5 bg-surface hover:bg-surface-hover"
-                  >
-                    {preset}
-                  </button>
-                ))}
-              </div>
-            ))}
-          </div>
-
-          <form onSubmit={handleCustomSubmit} className="flex items-center gap-1.5">
-            <input
-              type="text"
-              value={customText}
-              onChange={(e) => setCustomText(e.target.value)}
-              placeholder="직접 입력 (예: 코러스)"
-              className="flex-1 min-w-0 border border-border bg-surface rounded px-2 py-1 text-xs"
-            />
-            <button
-              type="submit"
-              className="flex items-center gap-1 text-xs border border-border rounded px-2 py-1 bg-surface hover:bg-surface-hover shrink-0"
-            >
-              <Plus size={12} />
-              추가
-            </button>
-          </form>
         </div>
       )}
     </div>

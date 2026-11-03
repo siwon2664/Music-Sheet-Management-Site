@@ -12,6 +12,7 @@ import {
   KeyboardSensor,
   useSensor,
   useSensors,
+  type Announcements,
   type DragEndEvent,
   type DragOverEvent,
   type DragStartEvent,
@@ -20,7 +21,8 @@ import {
 } from '@dnd-kit/core';
 import { arrayMove, sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 import { createClient } from '@/lib/supabase/client';
-import { exportSetlistToPdf } from '@/lib/exportSetlistPdf';
+import { prefetchSignedUrls } from '@/lib/sheetStorage';
+import { isPdfFile } from '@/lib/storage';
 import SheetLibraryPanel, { LIBRARY_DROP_ID, type LibrarySheet } from './SheetLibraryPanel';
 import SetlistPanel, { SETLIST_DROP_END_ID, type SetlistItem } from './SetlistPanel';
 import PerformanceMode from './PerformanceMode';
@@ -35,7 +37,9 @@ interface SetlistEditorProps {
   initialItems: SetlistItem[];
 }
 
-let tempIdCounter = 0;
+const DND_INSTRUCTIONS = {
+  draggable: '스페이스바나 엔터로 곡을 집고, 방향키로 옮긴 뒤 다시 스페이스바나 엔터로 내려놓으세요. Esc를 누르면 취소됩니다.',
+};
 
 // dnd-kit 기본 센서는 어느 엘리먼트에서 눌렀든 무조건 드래그를 시도한다 — 버튼이나
 // 입력창 위에서도 예외를 두지 않는다. 콘티 카드 전체에 드래그 리스너를 걸면서도
@@ -108,6 +112,9 @@ export default function SetlistEditor({
   const itemsRef = useRef(items);
   itemsRef.current = items;
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 저장은 한 번에 하나씩 순서대로 실행한다. 앞선 저장이 끝나기 전에 다음 저장이 끼어들면
+  // 오래된 내용이 나중에 써질 수 있다.
+  const saveQueueRef = useRef<Promise<boolean>>(Promise.resolve(true));
   // 최초 마운트 시 initialItems로 items가 세팅되는 것까지 저장 대상으로 잡으면
   // 페이지를 열기만 해도 불필요한 delete+insert가 발생하므로, 첫 렌더는 건너뛴다.
   const isFirstRenderRef = useRef(true);
@@ -149,14 +156,42 @@ export default function SetlistEditor({
     };
   }, []);
 
+  // 곡을 추가할 때 썸네일을 바로 보여줄 수 있게 라이브러리 전체의 서명 URL을 미리 받아 둔다.
+  // SetlistPanel은 같은 캐시(lib/signedUrlCache)를 먼저 확인한다.
+  useEffect(() => {
+    void prefetchSignedUrls(
+      initialSheets.flatMap((sheet) => {
+        if (sheet.thumbnail_url) return [sheet.thumbnail_url];
+        return sheet.file_url && !isPdfFile(sheet.file_url) ? [sheet.file_url] : [];
+      })
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const addedSheetIds = useMemo(() => new Set(items.map((item) => item.sheetId)), [items]);
+
+  function dragLabel(id: string | number) {
+    const item = items.find((i) => i.id === id);
+    if (item) return item.title;
+    return sheets.find((sheet) => `library-${sheet.id}` === id)?.title ?? '곡';
+  }
+
+  const announcements: Announcements = {
+    onDragStart: ({ active }) => `${dragLabel(active.id)}을(를) 집었습니다.`,
+    onDragOver: ({ active, over }) =>
+      over ? `${dragLabel(active.id)}을(를) ${dragLabel(over.id)} 위로 옮겼습니다.` : undefined,
+    onDragEnd: ({ active, over }) =>
+      over ? `${dragLabel(active.id)}을(를) ${dragLabel(over.id)} 자리에 놓았습니다.` : `${dragLabel(active.id)}을(를) 놓았습니다.`,
+    onDragCancel: ({ active }) => `${dragLabel(active.id)} 옮기기를 취소했습니다.`,
+  };
 
   function addSheet(sheet: LibrarySheet, atIndex?: number) {
     if (addedSheetIds.has(sheet.id)) return;
     setSaved(false);
 
     const newItem: SetlistItem = {
-      id: `temp-${sheet.id}-${tempIdCounter++}`,
+      // setlist_sheets 행의 id로 그대로 저장된다 (writeItems의 upsert 기준).
+      id: crypto.randomUUID(),
       sheetId: sheet.id,
       title: sheet.title,
       originalKey: sheet.key,
@@ -342,6 +377,9 @@ export default function SetlistEditor({
   // 악보의 bpm은 콘티 소속이 아니라 악보 자체의 값이라, 콘티를 저장하기 전이라도
   // 바로 sheets 테이블에 반영해서 다음에 이 악보를 쓸 때도 값이 남아있게 한다.
   async function updateSheetBpm(sheetId: string, bpm: number | null) {
+    // 값을 안 바꾸고 입력창에서 나갈 때마다 저장되지 않게 한다.
+    if (sheets.find((s) => s.id === sheetId)?.bpm === bpm) return;
+
     setSheets((prev) => prev.map((s) => (s.id === sheetId ? { ...s, bpm } : s)));
     setItems((prev) => prev.map((item) => (item.sheetId === sheetId ? { ...item, bpm } : item)));
 
@@ -349,20 +387,18 @@ export default function SetlistEditor({
     if (updateError) setError(updateError.message);
   }
 
-  // handleSave(수동 저장)와 자동저장 타이머 콜백이 공유하는 실제 저장 로직.
-  // 항상 "현재 setlist_sheets 행을 전부 지우고 넘겨받은 items로 다시 채우는" 방식이라,
-  // 다른 기기가 먼저 저장해둔 내용을 이 함수 호출 시점의 로컬 items가 그대로 덮어쓸 수
-  // 있다 — 같은 콘티를 동시에 열어놓고 편집하는 상황이면 나중에 저장되는 쪽이 이긴다.
-  // 자동저장이 debounce로 저장 주기를 짧게 만들어서 이 위험을 줄여주긴 하지만 완전히
-  // 없애주지는 않는다는 점은 알아두고 쓴다.
-  async function persistItems(itemsToSave: SetlistItem[]): Promise<boolean> {
+  // 목록에서 빠진 행만 지운 뒤 나머지를 id 기준으로 upsert한다. 두 요청이 원자적이지는
+  // 않지만, 어느 쪽이 실패하거나 탭이 닫혀도 목록에 남아 있는 곡은 지워지지 않는다.
+  // ponytail: 같은 콘티를 동시에 편집하면 나중에 저장한 쪽이 다른 사람이 추가한 곡을 지울 수 있다. 막으려면 버전 컬럼으로 충돌을 검사한다.
+  async function writeItems(itemsToSave: SetlistItem[]): Promise<boolean> {
     setSaving(true);
     setError(null);
 
-    const { error: deleteError } = await supabase
-      .from('setlist_sheets')
-      .delete()
-      .eq('setlist_id', setlistId);
+    let staleRows = supabase.from('setlist_sheets').delete().eq('setlist_id', setlistId);
+    if (itemsToSave.length > 0) {
+      staleRows = staleRows.not('id', 'in', `(${itemsToSave.map((item) => item.id).join(',')})`);
+    }
+    const { error: deleteError } = await staleRows;
 
     if (deleteError) {
       setSaving(false);
@@ -371,8 +407,9 @@ export default function SetlistEditor({
     }
 
     if (itemsToSave.length > 0) {
-      const { error: insertError } = await supabase.from('setlist_sheets').insert(
+      const { error: upsertError } = await supabase.from('setlist_sheets').upsert(
         itemsToSave.map((item, index) => ({
+          id: item.id,
           setlist_id: setlistId,
           sheet_id: item.sheetId,
           team_id: teamId,
@@ -383,9 +420,9 @@ export default function SetlistEditor({
         }))
       );
 
-      if (insertError) {
+      if (upsertError) {
         setSaving(false);
-        setError(insertError.message);
+        setError(upsertError.message);
         return false;
       }
     }
@@ -393,6 +430,11 @@ export default function SetlistEditor({
     setSaving(false);
     setSaved(true);
     return true;
+  }
+
+  function persistItems(itemsToSave: SetlistItem[]): Promise<boolean> {
+    saveQueueRef.current = saveQueueRef.current.then(() => writeItems(itemsToSave));
+    return saveQueueRef.current;
   }
 
   // 대기 중인 자동저장 타이머가 있으면 취소하고 지금 즉시 저장한다 — 수동 저장 버튼과
@@ -444,8 +486,7 @@ export default function SetlistEditor({
       clearTimeout(saveTimeoutRef.current);
       saveTimeoutRef.current = null;
     }
-    const ok = await persistItems(items);
-    if (ok) router.refresh();
+    await persistItems(items);
   }
 
   async function handleDeleteSetlist() {
@@ -471,6 +512,8 @@ export default function SetlistEditor({
     setDownloadError(null);
 
     try {
+      // pdf-lib가 커서 다운로드할 때만 불러온다.
+      const { exportSetlistToPdf } = await import('@/lib/exportSetlistPdf');
       const { blob, skipped } = await exportSetlistToPdf(
         items.map((item) => ({ title: item.title, fileUrl: item.fileUrl, note: item.note })),
         { includeNotes }
@@ -502,8 +545,23 @@ export default function SetlistEditor({
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <p className="text-sm text-muted">곡을 추가하고 순서·Key·메모를 정리하세요. 변경사항은 잠시 후 자동으로 저장됩니다.</p>
         <div className="flex items-center gap-3">
-          {saved && <span className="text-sm text-green-600 dark:text-green-400">저장됨</span>}
-          {error && <span className="text-sm text-red-600 dark:text-red-400">{error}</span>}
+          {error ? (
+            <>
+              <span className="text-sm text-red-600 dark:text-red-400">{error}</span>
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={saving}
+                className="border border-border rounded px-3 py-2 text-sm font-medium hover:bg-surface-hover disabled:opacity-50"
+              >
+                다시 저장
+              </button>
+            </>
+          ) : (
+            <span aria-live="polite" className="min-w-[4rem] text-right text-sm text-muted">
+              {saving ? '저장 중...' : saved ? '저장됨' : ''}
+            </span>
+          )}
           <button
             type="button"
             onClick={() => {
@@ -517,14 +575,6 @@ export default function SetlistEditor({
           >
             <Play size={14} />
             연주 시작
-          </button>
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={saving}
-            className="bg-accent text-accent-foreground rounded px-4 py-2 text-sm font-medium hover:bg-accent-hover disabled:opacity-50"
-          >
-            {saving ? '저장 중...' : '콘티 저장하기'}
           </button>
           <div className="relative" ref={menuRef}>
             <button
@@ -578,6 +628,7 @@ export default function SetlistEditor({
         onDragStart={handleDragStart}
         onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
+        accessibility={{ announcements, screenReaderInstructions: DND_INSTRUCTIONS }}
       >
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <SheetLibraryPanel
@@ -639,7 +690,7 @@ export default function SetlistEditor({
       )}
 
       {showDownloadModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+        <div role="dialog" aria-modal="true" aria-label="콘티 다운로드" className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="bg-surface text-foreground rounded-lg shadow-lg w-full max-w-sm p-6">
             <h2 className="text-lg font-semibold mb-2">콘티 다운로드</h2>
             <p className="text-sm text-muted mb-4">

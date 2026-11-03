@@ -62,37 +62,33 @@ export default async function DashboardPage({
 
   const team = activeTeam;
 
-  const { data: profile } = await supabase
-    .from('users')
-    .select('display_name, avatar_url')
-    .eq('id', user.id)
-    .single();
-
   const [todayYear, todayMonth] = todayKeyInKorea().split('-').map(Number);
   const year = Number(searchParams.year) || todayYear;
   const month = Number(searchParams.month) || todayMonth;
   const { start, end } = getMonthRange(year, month);
 
-  const { data: setlists } = await supabase
-    .from('setlists')
-    .select('id, title, event_date')
-    .eq('team_id', team.id)
-    .gte('event_date', start)
-    .lte('event_date', end)
-    .order('event_date', { ascending: true });
+  const [{ data: profile }, { data: setlists }, { data: fixedSetlists }] = await Promise.all([
+    supabase.from('users').select('display_name, avatar_url').eq('id', user.id).single(),
+    supabase
+      .from('setlists')
+      .select('id, title, event_date')
+      .eq('team_id', team.id)
+      .gte('event_date', start)
+      .lte('event_date', end)
+      .order('event_date', { ascending: true }),
+    // 날짜 없이(event_date IS NULL) 등록된 콘티 = 날짜에 상관없이 매번 쓰는 고정 콘티
+    supabase
+      .from('setlists')
+      .select('id, title')
+      .eq('team_id', team.id)
+      .is('event_date', null)
+      .order('created_at', { ascending: true }),
+  ]);
 
   // event_date는 스키마상 nullable이지만 위 gte/lte 필터로 null 행은 이미 제외된다.
   const monthSetlists = (setlists ?? []).filter(
     (setlist): setlist is typeof setlist & { event_date: string } => setlist.event_date !== null
   );
-
-  // 날짜 없이(event_date IS NULL) 등록된 콘티 = 날짜에 상관없이 매번 쓰는 고정 콘티
-  const { data: fixedSetlists } = await supabase
-    .from('setlists')
-    .select('id, title')
-    .eq('team_id', team.id)
-    .is('event_date', null)
-    .order('created_at', { ascending: true });
 
   return (
     <div className="min-h-screen bg-background flex flex-col">

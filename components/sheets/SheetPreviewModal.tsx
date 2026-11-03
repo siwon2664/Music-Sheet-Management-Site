@@ -116,7 +116,7 @@ export default function SheetPreviewModal({ sheets, initialIndex, teamId, onClos
   const actualSheetId = sheet?.sheetId ?? sheet?.id;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
+    <div role="dialog" aria-modal="true" aria-label="악보 미리보기" className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
       <div
         className="relative w-full h-full flex items-center justify-center"
         onClick={(e) => e.stopPropagation()}

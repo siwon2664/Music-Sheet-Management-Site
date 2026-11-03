@@ -24,14 +24,19 @@ export function isChosungOnly(text: string): boolean {
   return text.length > 0 && [...text].every((ch) => CHOSUNG_LIST.includes(ch));
 }
 
-// 초성만 입력된 경우 초성 매칭, 아니면 일반 부분 문자열 매칭.
-export function matchesSearch(target: string, query: string): boolean {
-  const trimmed = query.trim();
-  if (!trimmed) return true;
+function compact(text: string): string {
+  return text.replace(/\s+/g, '').toLowerCase();
+}
 
-  if (isChosungOnly(trimmed)) {
-    return getChosung(target).includes(trimmed);
+// 초성만 입력된 경우 초성 매칭, 아니면 일반 부분 문자열 매칭. 제목의 띄어쓰기는
+// 곡마다 제각각이라("갈 길을"/"갈길을") 공백을 빼고 비교한다.
+export function matchesSearch(target: string, query: string): boolean {
+  const normalized = compact(query);
+  if (!normalized) return true;
+
+  if (isChosungOnly(normalized)) {
+    return compact(getChosung(target)).includes(normalized);
   }
 
-  return target.toLowerCase().includes(trimmed.toLowerCase());
+  return compact(target).includes(normalized);
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
@@ -25,6 +25,7 @@ interface DashboardCalendarProps {
 }
 
 const WEEKDAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'];
+const SELECTED_DATE_KEY = 'dashboard-selected-date';
 
 function pad(n: number) {
   return String(n).padStart(2, '0');
@@ -40,6 +41,16 @@ export default function DashboardCalendar({ teamId, role, year, month, setlists 
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [setlistsState, setSetlistsState] = useState(setlists);
+
+  // 콘티를 보고 돌아와도 고르던 날짜가 그대로 남게 한다. 서버 렌더링과 어긋나지 않도록 마운트 후에 읽는다.
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem(SELECTED_DATE_KEY);
+      if (saved?.startsWith(`${year}-${pad(month)}-`)) setSelectedDate(saved);
+    } catch {
+      // 저장소를 못 쓰는 환경이면 선택을 복원하지 않는다.
+    }
+  }, [year, month]);
 
   const setlistsByDate = useMemo(() => {
     const map = new Map<string, SetlistSummary[]>();
@@ -74,8 +85,14 @@ export default function DashboardCalendar({ teamId, role, year, month, setlists 
   const nextYear = month === 12 ? year + 1 : year;
 
   function handleSelectDay(day: number) {
-    setSelectedDate(toDateKey(year, month, day));
+    const dateKey = toDateKey(year, month, day);
+    setSelectedDate(dateKey);
     setShowCreateModal(false);
+    try {
+      sessionStorage.setItem(SELECTED_DATE_KEY, dateKey);
+    } catch {
+      // 위와 같음
+    }
   }
 
   async function handleDeleteSetlist(id: string) {
@@ -158,7 +175,8 @@ export default function DashboardCalendar({ teamId, role, year, month, setlists 
               }
 
               const dateKey = toDateKey(year, month, day);
-              const hasSetlist = setlistsByDate.has(dateKey);
+              const daySetlists = setlistsByDate.get(dateKey) ?? [];
+              const hasSetlist = daySetlists.length > 0;
               const isSelected = selectedDate === dateKey;
               const isToday = dateKey === today;
 
@@ -168,28 +186,34 @@ export default function DashboardCalendar({ teamId, role, year, month, setlists 
                   type="button"
                   onClick={() => handleSelectDay(day)}
                   className={[
-                    'relative aspect-square flex flex-col items-center justify-center text-sm',
+                    'relative aspect-square min-w-0 flex flex-col items-center justify-center gap-0.5 text-sm',
                     gridLineClasses,
-                    isSelected ? 'bg-accent text-accent-foreground' : 'hover:bg-surface-hover',
-                    isToday && !isSelected ? 'font-semibold text-blue-600 dark:text-blue-400' : '',
+                    // 테마마다 accent 색이 달라 글자가 안 보일 수 있으므로 항상 대비가 보장되는 조합을 쓴다.
+                    isSelected ? 'bg-foreground text-background' : 'hover:bg-surface-hover',
                   ].join(' ')}
                 >
-                  {isToday && (
-                    <span
-                      className={[
-                        'absolute top-1 left-1 w-1.5 h-1.5 rounded-full',
-                        isSelected ? 'bg-accent-foreground' : 'bg-blue-600 dark:bg-blue-400',
-                      ].join(' ')}
-                    />
-                  )}
-                  {day}
+                  <span
+                    aria-current={isToday ? 'date' : undefined}
+                    className={[
+                      'w-7 h-7 flex items-center justify-center rounded-full',
+                      isToday ? 'font-semibold ring-2 ring-blue-600 dark:ring-blue-400' : '',
+                    ].join(' ')}
+                  >
+                    {day}
+                  </span>
                   {hasSetlist && (
-                    <span
-                      className={[
-                        'absolute bottom-1 w-1.5 h-1.5 rounded-full',
-                        isSelected ? 'bg-accent-foreground' : 'bg-foreground',
-                      ].join(' ')}
-                    />
+                    <>
+                      <span className="hidden md:block w-full px-1 truncate text-[10px] leading-tight">
+                        {daySetlists[0].title}
+                        {daySetlists.length > 1 && ` +${daySetlists.length - 1}`}
+                      </span>
+                      <span
+                        className={[
+                          'md:hidden absolute bottom-1 w-1.5 h-1.5 rounded-full',
+                          isSelected ? 'bg-background' : 'bg-foreground',
+                        ].join(' ')}
+                      />
+                    </>
                   )}
                 </button>
               );

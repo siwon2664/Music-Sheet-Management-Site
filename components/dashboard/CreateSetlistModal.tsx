@@ -26,9 +26,11 @@ export default function CreateSetlistModal({ teamId, date, onClose }: CreateSetl
     setLoading(true);
     setError(null);
 
+    // 저장된 세션을 읽어 네트워크 왕복을 줄인다. 권한은 어차피 RLS가 서버에서 검사한다.
     const {
-      data: { user },
-    } = await supabase.auth.getUser();
+      data: { session },
+    } = await supabase.auth.getSession();
+    const user = session?.user;
 
     if (!user) {
       setLoading(false);
@@ -56,11 +58,10 @@ export default function CreateSetlistModal({ teamId, date, onClose }: CreateSetl
     }
 
     router.push('/dashboard/setlist/' + setlist.id);
-    router.refresh();
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+    <div role="dialog" aria-modal="true" aria-label="새 콘티 만들기" className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
       <div className="bg-surface text-foreground rounded-lg shadow-lg w-full max-w-sm p-6 relative">
         <button
           type="button"
