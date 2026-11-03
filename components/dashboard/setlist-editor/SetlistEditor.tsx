@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type TouchEvent as ReactTouchEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type TouchEvent as ReactTouchEvent } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { Download, MoreVertical, Play, Trash2 } from 'lucide-react';
@@ -38,6 +38,11 @@ interface SetlistEditorProps {
 }
 
 const PerformanceMode = dynamic(() => import('./PerformanceMode'), { ssr: false });
+
+// 렌더링마다 새 객체를 넘기면 dnd-kit 컨텍스트가 바뀌어 useDraggable을 쓰는 카드가 memo와 상관없이 전부 다시 그려진다.
+const MOUSE_SENSOR_OPTIONS = { activationConstraint: { distance: 8 } };
+const TOUCH_SENSOR_OPTIONS = { activationConstraint: { delay: 200, tolerance: 8 } };
+const KEYBOARD_SENSOR_OPTIONS = { coordinateGetter: sortableKeyboardCoordinates };
 
 const DND_INSTRUCTIONS = {
   draggable: '스페이스바나 엔터로 곡을 집고, 방향키로 옮긴 뒤 다시 스페이스바나 엔터로 내려놓으세요. Esc를 누르면 취소됩니다.',
@@ -136,9 +141,9 @@ export default function SetlistEditor({
   const [deleteTarget, setDeleteTarget] = useState(false);
 
   const sensors = useSensors(
-    useSensor(FilteredMouseSensor, { activationConstraint: { distance: 8 } }),
-    useSensor(FilteredTouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+    useSensor(FilteredMouseSensor, MOUSE_SENSOR_OPTIONS),
+    useSensor(FilteredTouchSensor, TOUCH_SENSOR_OPTIONS),
+    useSensor(KeyboardSensor, KEYBOARD_SENSOR_OPTIONS)
   );
 
   useEffect(() => {
@@ -179,7 +184,12 @@ export default function SetlistEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const addedSheetIds = useMemo(() => new Set(items.map((item) => item.sheetId)), [items]);
+  // 메모나 Key를 고칠 때는 들어 있는 곡이 그대로이므로 Set도 그대로 둬서 라이브러리가 다시 그려지지 않게 한다.
+  const addedSheetIdsKey = items.map((item) => item.sheetId).join(',');
+  const addedSheetIds = useMemo(
+    () => new Set(addedSheetIdsKey ? addedSheetIdsKey.split(',') : []),
+    [addedSheetIdsKey]
+  );
 
   function dragLabel(id: string | number) {
     const item = items.find((i) => i.id === id);
@@ -221,6 +231,10 @@ export default function SetlistEditor({
       return next;
     });
   }
+
+  const addSheetRef = useRef(addSheet);
+  addSheetRef.current = addSheet;
+  const handleLibraryAdd = useCallback((sheet: LibrarySheet) => addSheetRef.current(sheet), []);
 
   function removeItem(index: number) {
     setSaved(false);
@@ -646,7 +660,7 @@ export default function SetlistEditor({
             sheets={sheets}
             teamId={teamId}
             addedSheetIds={addedSheetIds}
-            onAdd={(sheet) => addSheet(sheet)}
+            onAdd={handleLibraryAdd}
             isDeleteTarget={deleteTarget}
             className="order-2 lg:order-1"
           />

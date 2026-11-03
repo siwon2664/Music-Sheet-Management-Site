@@ -73,6 +73,9 @@ export default function SetlistPanel({
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
   const [thumbnailUrls, setThumbnailUrls] = useState<Record<string, string>>({});
 
+  // 메모를 칠 때는 곡 구성이 그대로이므로 썸네일을 다시 찾지 않는다.
+  const thumbnailKey = items.map((item) => `${item.sheetId}:${item.thumbnailUrl ?? item.fileUrl}`).join(',');
+
   // 악보 라이브러리 테이블과 같은 방식으로 각 행의 썸네일용 signed URL을 받아온다.
   // sessionStorage 캐시(lib/signedUrlCache)도 그대로 공유하므로, 라이브러리를 먼저
   // 둘러본 적이 있으면 여기서 다시 요청하지 않고 캐시된 URL을 바로 쓴다.
@@ -127,7 +130,7 @@ export default function SetlistPanel({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items]);
+  }, [thumbnailKey]);
 
   const previewSheets = useMemo(
     () =>

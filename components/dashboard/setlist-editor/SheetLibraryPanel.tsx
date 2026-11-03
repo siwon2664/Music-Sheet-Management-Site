@@ -1,7 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { useDeferredValue, useMemo, useState } from 'react';
+import { memo, useDeferredValue, useMemo, useState } from 'react';
 import { ChevronDown, ChevronUp, GripVertical, Plus, Search } from 'lucide-react';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
 import { matchesSearch } from '@/lib/hangul';
@@ -36,7 +36,11 @@ interface SheetLibraryPanelProps {
   className?: string;
 }
 
-export default function SheetLibraryPanel({
+// memo: 메모를 칠 때마다 수백 개 카드를 다시 그리지 않게 한다. 부모가 넘기는 props는
+// 곡 목록이 실제로 바뀔 때만 달라진다 (SetlistEditor의 addedSheetIds, handleLibraryAdd 참고).
+export default memo(SheetLibraryPanel);
+
+function SheetLibraryPanel({
   sheets,
   teamId,
   addedSheetIds,
@@ -148,9 +152,10 @@ export default function SheetLibraryPanel({
             <DraggableSheetCard
               key={sheet.id}
               sheet={sheet}
+              index={index}
               added={addedSheetIds.has(sheet.id)}
-              onAdd={() => onAdd(sheet)}
-              onPreview={() => setPreviewIndex(index)}
+              onAdd={onAdd}
+              onPreview={setPreviewIndex}
             />
           ))}
 
@@ -174,16 +179,23 @@ export default function SheetLibraryPanel({
 
 interface DraggableSheetCardProps {
   sheet: LibrarySheet;
+  index: number;
   added: boolean;
-  onAdd: () => void;
-  onPreview: () => void;
+  onAdd: (sheet: LibrarySheet) => void;
+  onPreview: (index: number) => void;
 }
 
 // 콘티 목록으로 끌어다 놓을 수 있는 카드. dnd-kit(useDraggable)을 쓰기 때문에
 // 마우스뿐 아니라 터치(모바일)에서도 왼쪽 손잡이를 잡고 그대로 콘티 목록 위로
 // 드래그하면 추가된다. 손잡이만 드래그를 시작시키고 나머지 영역(제목 클릭 →
 // 미리보기, 버튼 클릭 → 추가)은 그대로 두어 서로 간섭하지 않게 한다.
-function DraggableSheetCard({ sheet, added, onAdd, onPreview }: DraggableSheetCardProps) {
+const DraggableSheetCard = memo(function DraggableSheetCard({
+  sheet,
+  index,
+  added,
+  onAdd,
+  onPreview,
+}: DraggableSheetCardProps) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: `library-${sheet.id}`,
     data: { type: 'library' as const, sheet },
@@ -197,7 +209,8 @@ function DraggableSheetCard({ sheet, added, onAdd, onPreview }: DraggableSheetCa
     <div
       ref={setNodeRef}
       className={[
-        'border border-border rounded-lg px-3 py-2 flex flex-col gap-2 bg-surface-hover transition-opacity',
+        // 화면 밖 카드는 레이아웃과 페인트를 건너뛰어 곡이 많아도 스크롤이 가볍게 한다.
+        'border border-border rounded-lg px-3 py-2 flex flex-col gap-2 bg-surface-hover transition-opacity [content-visibility:auto] [contain-intrinsic-size:auto_3rem]',
         isDragging ? 'opacity-40' : '',
       ].join(' ')}
     >
@@ -225,9 +238,9 @@ function DraggableSheetCard({ sheet, added, onAdd, onPreview }: DraggableSheetCa
         <div
           role="button"
           tabIndex={0}
-          onClick={onPreview}
+          onClick={() => onPreview(index)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') onPreview();
+            if (e.key === 'Enter' || e.key === ' ') onPreview(index);
           }}
           className="flex-1 min-w-0 cursor-pointer"
         >
@@ -245,7 +258,7 @@ function DraggableSheetCard({ sheet, added, onAdd, onPreview }: DraggableSheetCa
 
         <button
           type="button"
-          onClick={onAdd}
+          onClick={() => onAdd(sheet)}
           disabled={added}
           aria-label={added ? `${sheet.title} 추가됨` : `${sheet.title} 콘티에 추가`}
           className="shrink-0 flex items-center gap-1 text-xs font-medium border border-border rounded px-2 py-1 hover:bg-surface disabled:opacity-40 disabled:cursor-not-allowed"
@@ -266,4 +279,4 @@ function DraggableSheetCard({ sheet, added, onAdd, onPreview }: DraggableSheetCa
       )}
     </div>
   );
-}
+});
