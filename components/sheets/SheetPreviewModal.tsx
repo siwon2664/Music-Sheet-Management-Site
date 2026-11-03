@@ -134,7 +134,7 @@ export default function SheetPreviewModal({ sheets, initialIndex, teamId, onClos
         <button
           type="button"
           onClick={onClose}
-          className="absolute top-0 right-0 text-white/80 hover:text-white"
+          className="absolute top-0 right-0 z-30 p-2 -m-2 text-white/80 hover:text-white"
           aria-label="닫기"
         >
           <X size={24} />

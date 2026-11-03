@@ -312,7 +312,7 @@ function SortableSetlistRow({
               disabled={!canReorder}
               title={canReorder ? '드래그해서 순서 변경' : '팀장만 순서를 변경할 수 있습니다.'}
               aria-label={canReorder ? '드래그해서 순서 변경' : '팀장만 순서를 변경할 수 있습니다.'}
-              className={`mt-1 shrink-0 touch-none rounded ${
+              className={`mt-1 p-2 -m-2 shrink-0 touch-none rounded ${
                 canReorder ? 'cursor-grab text-muted active:cursor-grabbing' : 'cursor-not-allowed text-muted/50'
               }`}
             >
@@ -344,14 +344,14 @@ function SortableSetlistRow({
                   onRemove();
                 }
               }}
-              className="shrink-0 text-muted hover:text-red-600 dark:hover:text-red-400"
+              className="p-2 -m-2 shrink-0 text-muted hover:text-red-600 dark:hover:text-red-400"
               aria-label="삭제"
             >
               <Trash2 size={16} />
             </button>
           </div>
 
-          <div className="flex items-center gap-2 pl-7">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 sm:pl-7">
             <label className="text-xs text-muted flex items-center gap-1">
               Key
               <select
@@ -396,7 +396,7 @@ function SortableSetlistRow({
             value={item.note}
             onChange={(e) => onUpdate({ note: e.target.value })}
             placeholder="송폼 메모 (예: 전주 없이 바로 싱어 카피로 진입)"
-            className="border border-border bg-surface rounded px-2 py-1.5 text-xs ml-7"
+            className="border border-border bg-surface rounded px-2 py-1.5 text-xs w-full sm:w-auto sm:ml-7"
           />
 
           <SongFormEditor value={item.songForm} onChange={(next) => onUpdate({ songForm: next })} />

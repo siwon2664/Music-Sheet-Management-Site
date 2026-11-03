@@ -233,7 +233,7 @@ const DraggableSheetCard = memo(function DraggableSheetCard({
           aria-label={added ? '이미 추가된 악보입니다.' : '드래그해서 콘티에 추가'}
           title={added ? '이미 추가된 악보입니다.' : '드래그해서 콘티에 추가'}
           className={[
-            'shrink-0 touch-none rounded',
+            'p-2 -m-2 shrink-0 touch-none rounded',
             added ? 'text-muted/40 cursor-not-allowed' : 'text-muted cursor-grab active:cursor-grabbing',
           ].join(' ')}
         >
@@ -270,7 +270,7 @@ const DraggableSheetCard = memo(function DraggableSheetCard({
           onClick={() => onAdd(sheet)}
           disabled={added}
           aria-label={added ? `${sheet.title} 추가됨` : `${sheet.title} 콘티에 추가`}
-          className="shrink-0 flex items-center gap-1 text-xs font-medium border border-border rounded px-2 py-1 hover:bg-surface disabled:opacity-40 disabled:cursor-not-allowed"
+          className="shrink-0 flex items-center gap-1 text-xs font-medium border border-border rounded px-2.5 py-1.5 hover:bg-surface disabled:opacity-40 disabled:cursor-not-allowed"
         >
           <Plus size={14} />
           {added ? '추가됨' : '추가'}

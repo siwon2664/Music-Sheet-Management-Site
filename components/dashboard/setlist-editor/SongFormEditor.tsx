@@ -54,7 +54,7 @@ export default function SongFormEditor({ value, onChange }: SongFormEditorProps)
   }
 
   return (
-    <div className="pl-7">
+    <div className="sm:pl-7">
       <button
         type="button"
         onClick={() => setOpen((prev) => !prev)}

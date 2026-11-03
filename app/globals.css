@@ -87,3 +87,12 @@ body {
   background-color: var(--background);
   color: var(--foreground);
 }
+
+/* iOS Safari는 글자가 16px보다 작은 입력창을 누르면 화면을 확대한다. 터치 기기에서만 키워서 막는다. */
+@media (pointer: coarse) {
+  input:not([type='checkbox']):not([type='radio']),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}

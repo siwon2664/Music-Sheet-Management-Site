@@ -127,16 +127,24 @@ export default function DashboardCalendar({ teamId, role, year, month, setlists 
             {year}년 {month}월
           </h2>
           <div className="flex items-center gap-1">
+            {!today.startsWith(`${year}-${pad(month)}-`) && (
+              <Link
+                href="/dashboard"
+                className="text-sm border border-border rounded px-3 py-1.5 mr-1 hover:bg-surface-hover"
+              >
+                오늘
+              </Link>
+            )}
             <Link
               href={`/dashboard?year=${prevYear}&month=${prevMonth}`}
-              className="p-1.5 rounded hover:bg-surface-hover"
+              className="p-2.5 rounded hover:bg-surface-hover"
               aria-label="이전 달"
             >
               <ChevronLeft size={18} />
             </Link>
             <Link
               href={`/dashboard?year=${nextYear}&month=${nextMonth}`}
-              className="p-1.5 rounded hover:bg-surface-hover"
+              className="p-2.5 rounded hover:bg-surface-hover"
               aria-label="다음 달"
             >
               <ChevronRight size={18} />
