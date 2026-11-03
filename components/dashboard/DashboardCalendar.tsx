@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import CreateSetlistModal from '@/components/dashboard/CreateSetlistModal';
 import SwipeToDeleteRow from '@/components/dashboard/SwipeToDeleteRow';
+import { todayKeyInKorea } from '@/lib/koreaTime';
 import { createClient } from '@/lib/supabase/client';
 import type { TeamRole } from '@/types/supabase';
 
@@ -31,11 +32,6 @@ function pad(n: number) {
 
 function toDateKey(year: number, month: number, day: number) {
   return `${year}-${pad(month)}-${pad(day)}`;
-}
-
-function todayKey() {
-  const now = new Date();
-  return toDateKey(now.getFullYear(), now.getMonth() + 1, now.getDate());
 }
 
 export default function DashboardCalendar({ teamId, role, year, month, setlists }: DashboardCalendarProps) {
@@ -70,7 +66,7 @@ export default function DashboardCalendar({ teamId, role, year, month, setlists 
     });
   }, [year, month]);
 
-  const today = todayKey();
+  const today = todayKeyInKorea();
 
   const prevMonth = month === 1 ? 12 : month - 1;
   const prevYear = month === 1 ? year - 1 : year;

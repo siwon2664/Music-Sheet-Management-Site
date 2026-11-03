@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { resolveActiveTeam } from '@/lib/activeTeam';
+import { todayKeyInKorea } from '@/lib/koreaTime';
 import CreateTeamForm from '@/components/team/CreateTeamForm';
 import JoinTeamByCodeForm from '@/components/team/JoinTeamByCodeForm';
 import TopNav from '@/components/dashboard/TopNav';
@@ -67,9 +68,9 @@ export default async function DashboardPage({
     .eq('id', user.id)
     .single();
 
-  const now = new Date();
-  const year = Number(searchParams.year) || now.getFullYear();
-  const month = Number(searchParams.month) || now.getMonth() + 1;
+  const [todayYear, todayMonth] = todayKeyInKorea().split('-').map(Number);
+  const year = Number(searchParams.year) || todayYear;
+  const month = Number(searchParams.month) || todayMonth;
   const { start, end } = getMonthRange(year, month);
 
   const { data: setlists } = await supabase

@@ -64,11 +64,12 @@ export default function TeamsManager({ teams: initialTeams, activeTeamId }: Team
 
     setBusyId(team.id);
     setError(null);
-    const { error: rpcError } = await supabase.rpc('delete_team', { p_team_id: team.id });
+    const response = await fetch(`/api/teams/${team.id}`, { method: 'DELETE' });
     setBusyId(null);
 
-    if (rpcError) {
-      setError(rpcError.message);
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null);
+      setError(payload?.error ?? '팀을 삭제하지 못했습니다.');
       return;
     }
 

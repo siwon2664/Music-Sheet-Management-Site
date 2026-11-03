@@ -1,12 +1,11 @@
-// 악보를 삭제하거나 수정(교체 업로드)해도 Storage의 실제 파일(원본/썸네일)은
-// 지워지지 않고 그대로 남는다 — sheets 테이블 행만 지워질 뿐, 코드 어디에도
-// supabase.storage.from('sheets').remove(...) 호출이 없기 때문이다.
-// 이 스크립트는 'sheets' 버킷의 모든 객체를 나열하고, sheets 테이블의
+// 파일 삭제가 실패했거나, 업로드 후 sheets 행을 만들지 못하면 저장소에 파일만 남는다.
+// 이 스크립트는 Supabase 'sheets' 버킷과 R2의 모든 객체를 나열하고, sheets 테이블의
 // file_url/thumbnail_url에 더 이상 참조되지 않는 "고아 파일"을 찾아
 // 용량과 목록을 보여준다. 기본은 dry-run이며 --delete를 줘야 실제로 지운다.
+// R2는 업로드 후 행이 만들어지기 전일 수 있으므로 1시간이 안 된 객체는 제외한다.
 //
 // 실행 전 준비:
-//   .env.local 에 SUPABASE_SERVICE_ROLE_KEY 필요 (backfillPdfThumbnails.mjs와 동일)
+//   .env.local 에 SUPABASE_SERVICE_ROLE_KEY 와 R2_* 값 4개 필요
 //
 // 사용법:
 //   node scripts/findOrphanedStorage.mjs            (조회만, 목록/용량 출력)
@@ -16,12 +15,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createClient } from '@supabase/supabase-js';
+import { DeleteObjectsCommand, ListObjectsV2Command, S3Client } from '@aws-sdk/client-s3';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, '..');
 
 const DELETE = process.argv.includes('--delete');
 const BUCKET = 'sheets';
+const R2_MIN_AGE_MS = 60 * 60 * 1000;
 
 function loadEnvLocal() {
   const envPath = path.join(projectRoot, '.env.local');
@@ -97,6 +98,19 @@ async function listAllObjects(supabase) {
   return all;
 }
 
+async function listR2Objects(r2, bucket) {
+  const all = [];
+  let token;
+  do {
+    const page = await r2.send(new ListObjectsV2Command({ Bucket: bucket, Prefix: 'r2/', ContinuationToken: token }));
+    for (const o of page.Contents ?? []) {
+      all.push({ name: o.Key, size: o.Size ?? 0, lastModified: o.LastModified });
+    }
+    token = page.NextContinuationToken;
+  } while (token);
+  return all;
+}
+
 async function main() {
   const env = loadEnvLocal();
   const supabaseUrl = env.NEXT_PUBLIC_SUPABASE_URL;
@@ -110,13 +124,26 @@ async function main() {
     process.exit(1);
   }
 
+  const missingR2 = ['R2_ACCOUNT_ID', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'R2_BUCKET_NAME'].filter((k) => !env[k]);
+  if (missingR2.length > 0) {
+    console.error(`.env.local 에 다음 값이 없습니다: ${missingR2.join(', ')}`);
+    process.exit(1);
+  }
+
   const supabase = createClient(supabaseUrl, serviceRoleKey, {
     auth: { persistSession: false },
   });
+  const r2 = new S3Client({
+    region: 'auto',
+    endpoint: `https://${env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+    credentials: { accessKeyId: env.R2_ACCESS_KEY_ID, secretAccessKey: env.R2_SECRET_ACCESS_KEY },
+  });
 
-  console.log('버킷의 전체 파일 목록을 가져오는 중...');
+  console.log('저장소의 전체 파일 목록을 가져오는 중...');
   const objects = await listAllObjects(supabase);
-  console.log(`버킷 내 파일 총 ${objects.length}개, 총 용량 ${formatBytes(objects.reduce((s, o) => s + o.size, 0))}\n`);
+  console.log(`Supabase 버킷 파일 총 ${objects.length}개, 총 용량 ${formatBytes(objects.reduce((s, o) => s + o.size, 0))}`);
+  const r2Objects = await listR2Objects(r2, env.R2_BUCKET_NAME);
+  console.log(`R2 파일 총 ${r2Objects.length}개, 총 용량 ${formatBytes(r2Objects.reduce((s, o) => s + o.size, 0))}\n`);
 
   console.log('sheets 테이블에서 참조 중인 경로를 가져오는 중...');
   const { data: sheets, error } = await supabase
@@ -134,7 +161,11 @@ async function main() {
   }
   console.log(`참조 중인 경로 ${referenced.size}개 (악보 ${sheets?.length ?? 0}개)\n`);
 
-  const orphans = objects.filter((o) => !referenced.has(o.name));
+  const supabaseOrphans = objects.filter((o) => !referenced.has(o.name));
+  const r2Orphans = r2Objects.filter(
+    (o) => !referenced.has(o.name) && Date.now() - o.lastModified.getTime() > R2_MIN_AGE_MS
+  );
+  const orphans = [...supabaseOrphans, ...r2Orphans];
   const orphanBytes = orphans.reduce((s, o) => s + o.size, 0);
 
   console.log(`=== 고아 파일(더 이상 참조되지 않음): ${orphans.length}개, ${formatBytes(orphanBytes)} ===`);
@@ -158,16 +189,25 @@ async function main() {
   console.log('\n고아 파일을 삭제하는 중...');
   const BATCH = 100;
   let deleted = 0;
-  for (let i = 0; i < orphans.length; i += BATCH) {
-    const batch = orphans.slice(i, i + BATCH).map((o) => o.name);
+  for (let i = 0; i < supabaseOrphans.length; i += BATCH) {
+    const batch = supabaseOrphans.slice(i, i + BATCH).map((o) => o.name);
     const { error: removeError } = await supabase.storage.from(BUCKET).remove(batch);
     if (removeError) {
-      console.error(`삭제 실패 (batch ${i}):`, removeError.message);
+      console.error(`Supabase 삭제 실패 (batch ${i}):`, removeError.message);
       continue;
     }
     deleted += batch.length;
   }
-  console.log(`완료: ${deleted}개 삭제, 약 ${formatBytes(orphanBytes)} 확보.`);
+  for (let i = 0; i < r2Orphans.length; i += BATCH) {
+    const batch = r2Orphans.slice(i, i + BATCH).map((o) => ({ Key: o.name }));
+    try {
+      await r2.send(new DeleteObjectsCommand({ Bucket: env.R2_BUCKET_NAME, Delete: { Objects: batch } }));
+      deleted += batch.length;
+    } catch (err) {
+      console.error(`R2 삭제 실패 (batch ${i}):`, err.message);
+    }
+  }
+  console.log(`완료: ${deleted}개 삭제 (전체 고아 파일 ${orphans.length}개, ${formatBytes(orphanBytes)}).`);
 }
 
 main();

@@ -9,3 +9,8 @@ const SHEET_LIMIT_EXEMPT_TEAM_NAMES = ['다드림교회'];
 export function isExemptFromSheetLimit(teamName: string): boolean {
   return SHEET_LIMIT_EXEMPT_TEAM_NAMES.includes(teamName);
 }
+
+// R2 무료 한도(10GB)를 한 팀이 다 쓰지 못하게 하는 팀별 저장 용량 상한.
+export const MAX_TEAM_STORAGE_BYTES = 5 * 1024 * 1024 * 1024;
+
+export const TEAM_STORAGE_LIMIT_MESSAGE = '팀 저장 용량(5GB)을 모두 사용했습니다. 사용하지 않는 악보를 삭제한 뒤 다시 시도해주세요.';

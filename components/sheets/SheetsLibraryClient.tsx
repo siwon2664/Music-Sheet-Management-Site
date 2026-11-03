@@ -21,6 +21,7 @@ import { isPdfFile, stripFileExtension } from '@/lib/storage';
 import { uploadSheetFile } from '@/lib/sheetUpload';
 import { isExemptFromSheetLimit, MAX_SHEETS_PER_TEAM, SHEET_LIMIT_MESSAGE } from '@/lib/limits';
 import { getCachedSignedUrl, setCachedSignedUrl } from '@/lib/signedUrlCache';
+import { SERVICE_TIME_ZONE } from '@/lib/koreaTime';
 import { getSignedSheetUrls, removeSheetFiles } from '@/lib/sheetStorage';
 import { exportSheetsAsMergedPdf, exportSheetsAsSeparatePdfs, type ExportSheetSource } from '@/lib/exportSheets';
 import type { TeamRole } from '@/types/supabase';
@@ -605,7 +606,7 @@ export default function SheetsLibraryClient({ teamId, teamName, role, initialShe
                 <td className="px-2 py-3 align-top text-muted">{sheet.key ?? '-'}</td>
                 <td className="px-2 py-3 align-top text-muted">{sheet.bpm ?? '-'}</td>
                 <td className="px-2 py-3 align-top text-muted">
-                  {new Date(sheet.created_at).toLocaleDateString('ko-KR')}
+                  {new Date(sheet.created_at).toLocaleDateString('ko-KR', { timeZone: SERVICE_TIME_ZONE })}
                 </td>
                 <td className="px-2 py-3 align-top text-right" onClick={(e) => e.stopPropagation()}>
                   <SheetRowMenu

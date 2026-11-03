@@ -1,7 +1,13 @@
 // 서버 전용 — Cloudflare R2(S3 호환) 클라이언트와 presigned URL 발급 헬퍼.
 // R2 자격증명은 비밀값이라 브라우저 번들에 들어가면 안 되므로, 이 파일은
 // Route Handler(app/api/**)에서만 import해야 한다.
-import { DeleteObjectsCommand, GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import {
+  DeleteObjectsCommand,
+  GetObjectCommand,
+  ListObjectsV2Command,
+  PutObjectCommand,
+  S3Client,
+} from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 const UPLOAD_URL_TTL_SECONDS = 600; // 업로드 시작까지 걸리는 시간을 넉넉히 줌
@@ -63,4 +69,31 @@ export async function deleteR2Objects(keys: string[]): Promise<void> {
     Delete: { Objects: keys.map((Key) => ({ Key })) },
   });
   await getClient().send(command);
+}
+
+async function listR2Objects(prefix: string): Promise<{ key: string; size: number }[]> {
+  const objects: { key: string; size: number }[] = [];
+  let token: string | undefined;
+  do {
+    const page = await getClient().send(
+      new ListObjectsV2Command({ Bucket: getBucketName(), Prefix: prefix, ContinuationToken: token })
+    );
+    for (const { Key, Size } of page.Contents ?? []) {
+      if (Key) objects.push({ key: Key, size: Size ?? 0 });
+    }
+    token = page.NextContinuationToken;
+  } while (token);
+  return objects;
+}
+
+export async function getR2PrefixSize(prefix: string): Promise<number> {
+  const objects = await listR2Objects(prefix);
+  return objects.reduce((sum, object) => sum + object.size, 0);
+}
+
+export async function deleteR2Prefix(prefix: string): Promise<void> {
+  const keys = (await listR2Objects(prefix)).map((object) => object.key);
+  for (let i = 0; i < keys.length; i += 1000) {
+    await deleteR2Objects(keys.slice(i, i + 1000));
+  }
 }
