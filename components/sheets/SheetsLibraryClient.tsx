@@ -1,6 +1,7 @@
 'use client';
 
 import { type DragEvent, memo, type MutableRefObject, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import {
   ArrowDown,
@@ -19,18 +20,19 @@ import { createClient } from '@/lib/supabase/client';
 import { matchesSearch } from '@/lib/hangul';
 import { keyFromTitle } from '@/lib/setlist';
 import { isPdfFile, stripFileExtension } from '@/lib/storage';
-import { uploadSheetFile } from '@/lib/sheetUpload';
 import { isExemptFromSheetLimit, MAX_SHEETS_PER_TEAM, SHEET_LIMIT_MESSAGE } from '@/lib/limits';
 import { getCachedSignedUrl, setCachedSignedUrl } from '@/lib/signedUrlCache';
 import { SERVICE_TIME_ZONE } from '@/lib/koreaTime';
 import { getSignedSheetUrls, removeSheetFiles } from '@/lib/sheetStorage';
-import { exportSheetsAsMergedPdf, exportSheetsAsSeparatePdfs, type ExportSheetSource } from '@/lib/exportSheets';
+import type { ExportSheetSource } from '@/lib/exportSheets';
 import type { TeamRole } from '@/types/supabase';
-import UploadSheetModal from './UploadSheetModal';
-import EditSheetModal from './EditSheetModal';
-import CreateSetlistFromSelectionModal from './CreateSetlistFromSelectionModal';
-import SheetPreviewModal from './SheetPreviewModal';
 import SheetThumbnail from './SheetThumbnail';
+
+// 업로드·수정·내보내기는 pdf-lib까지 끌고 와서 크므로 쓸 때 불러온다.
+const UploadSheetModal = dynamic(() => import('./UploadSheetModal'), { ssr: false });
+const EditSheetModal = dynamic(() => import('./EditSheetModal'), { ssr: false });
+const CreateSetlistFromSelectionModal = dynamic(() => import('./CreateSetlistFromSelectionModal'), { ssr: false });
+const SheetPreviewModal = dynamic(() => import('./SheetPreviewModal'), { ssr: false });
 
 export interface SheetRow {
   id: string;
@@ -89,6 +91,12 @@ export default function SheetsLibraryClient({ teamId, teamName, role, initialShe
     edit: () => {},
     remove: () => {},
   });
+
+  // 가장 자주 쓰는 미리보기는 첫 클릭부터 바로 열리도록 미리 받아 둔다.
+  useEffect(() => {
+    const timer = setTimeout(() => void import('./SheetPreviewModal'), 1500);
+    return () => clearTimeout(timer);
+  }, []);
 
   const canDelete = role === 'LEADER';
   const sheetLimitExempt = isExemptFromSheetLimit(teamName);
@@ -302,6 +310,7 @@ export default function SheetsLibraryClient({ teamId, teamName, role, initialShe
     setDownloading({ done: 0, total: sources.length });
 
     try {
+      const { exportSheetsAsMergedPdf, exportSheetsAsSeparatePdfs } = await import('@/lib/exportSheets');
       if (downloadMode === 'separate' && sources.length > 1) {
         const { files, skipped } = await exportSheetsAsSeparatePdfs(
           supabase,
@@ -370,6 +379,8 @@ export default function SheetsLibraryClient({ teamId, teamName, role, initialShe
 
     const uploaded: SheetRow[] = [];
     const failed: string[] = skippedFiles.map((file) => `${file.name}: ${SHEET_LIMIT_MESSAGE}`);
+
+    const { uploadSheetFile } = await import('@/lib/sheetUpload');
 
     for (const file of filesToUpload) {
       const { data: uploadedFile, error: uploadError } = await uploadSheetFile(teamId, file);

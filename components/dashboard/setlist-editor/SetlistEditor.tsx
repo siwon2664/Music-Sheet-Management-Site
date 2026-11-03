@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type TouchEvent as ReactTouchEvent } from 'react';
+import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { Download, MoreVertical, Play, Trash2 } from 'lucide-react';
 import {
@@ -25,7 +26,6 @@ import { prefetchSignedUrls } from '@/lib/sheetStorage';
 import { isPdfFile } from '@/lib/storage';
 import SheetLibraryPanel, { LIBRARY_DROP_ID, type LibrarySheet } from './SheetLibraryPanel';
 import SetlistPanel, { SETLIST_DROP_END_ID, type SetlistItem } from './SetlistPanel';
-import PerformanceMode from './PerformanceMode';
 import type { TeamRole } from '@/types/supabase';
 
 interface SetlistEditorProps {
@@ -36,6 +36,8 @@ interface SetlistEditorProps {
   sheets: LibrarySheet[];
   initialItems: SetlistItem[];
 }
+
+const PerformanceMode = dynamic(() => import('./PerformanceMode'), { ssr: false });
 
 const DND_INSTRUCTIONS = {
   draggable: '스페이스바나 엔터로 곡을 집고, 방향키로 옮긴 뒤 다시 스페이스바나 엔터로 내려놓으세요. Esc를 누르면 취소됩니다.',
@@ -154,6 +156,15 @@ export default function SetlistEditor({
       document.removeEventListener('mousedown', handleClickOutside);
       document.removeEventListener('keydown', handleKeyDown);
     };
+  }, []);
+
+  // 연주 시작과 미리보기는 첫 클릭부터 바로 열리도록 미리 받아 둔다.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      void import('./PerformanceMode');
+      void import('@/components/sheets/SheetPreviewModal');
+    }, 1500);
+    return () => clearTimeout(timer);
   }, []);
 
   // 곡을 추가할 때 썸네일을 바로 보여줄 수 있게 라이브러리 전체의 서명 URL을 미리 받아 둔다.

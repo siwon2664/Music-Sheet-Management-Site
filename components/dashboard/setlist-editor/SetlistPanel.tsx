@@ -1,5 +1,6 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { GripVertical, Trash2 } from 'lucide-react';
 import { useDroppable } from '@dnd-kit/core';
@@ -9,11 +10,12 @@ import { keyFromTitle } from '@/lib/setlist';
 import { isPdfFile } from '@/lib/storage';
 import { getCachedSignedUrl, setCachedSignedUrl } from '@/lib/signedUrlCache';
 import { getSignedSheetUrls } from '@/lib/sheetStorage';
-import SheetPreviewModal from '@/components/sheets/SheetPreviewModal';
 import SheetThumbnail from '@/components/sheets/SheetThumbnail';
 import SongFormEditor from './SongFormEditor';
 import type { LibrarySheet } from './SheetLibraryPanel';
 import type { TeamRole } from '@/types/supabase';
+
+const SheetPreviewModal = dynamic(() => import('@/components/sheets/SheetPreviewModal'), { ssr: false });
 
 const MAJOR_KEYS = ['C', 'C#', 'Db', 'D', 'D#', 'Eb', 'E', 'F', 'F#', 'Gb', 'G', 'G#', 'Ab', 'A', 'A#', 'Bb', 'B'];
 const MINOR_KEYS = ['Cm', 'C#m', 'Dm', 'D#m', 'Ebm', 'Em', 'Fm', 'F#m', 'Gm', 'G#m', 'Am', 'A#m', 'Bbm', 'Bm'];
@@ -135,6 +137,7 @@ export default function SetlistPanel({
         title: item.title,
         key: item.transposedKey ?? item.originalKey,
         file_url: item.fileUrl,
+        thumbnail_url: item.thumbnailUrl,
       })),
     [items]
   );

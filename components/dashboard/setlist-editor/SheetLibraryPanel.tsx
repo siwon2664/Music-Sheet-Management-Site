@@ -1,11 +1,13 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import { useDeferredValue, useMemo, useState } from 'react';
 import { ChevronDown, ChevronUp, GripVertical, Plus, Search } from 'lucide-react';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
 import { matchesSearch } from '@/lib/hangul';
 import { keyFromTitle } from '@/lib/setlist';
-import SheetPreviewModal from '@/components/sheets/SheetPreviewModal';
+
+const SheetPreviewModal = dynamic(() => import('@/components/sheets/SheetPreviewModal'), { ssr: false });
 
 // 콘티 목록에 있던 곡을 여기로 끌어다 놓으면 삭제를 물어보는 드롭 영역 id.
 // SetlistEditor의 onDragEnd/onDragOver가 이 id를 보고 "라이브러리 쪽으로 돌아왔는지"

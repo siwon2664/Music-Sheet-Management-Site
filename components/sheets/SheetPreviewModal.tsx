@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { isPdfFile } from '@/lib/storage';
 import { getSignedSheetUrl } from '@/lib/sheetStorage';
+import { getCachedSignedUrl, setCachedSignedUrl } from '@/lib/signedUrlCache';
 import DrawingLayer from './DrawingLayer';
 import ImageDrawingStage from './ImageDrawingStage';
 import PdfPageViewer from './PdfPageViewer';
@@ -13,6 +14,7 @@ export interface PreviewableSheet {
   title: string;
   key?: string | null;
   file_url: string | null;
+  thumbnail_url?: string | null;
   sheetId?: string; // 실제 sheets.id (없으면 id를 그대로 사용)
 }
 
@@ -28,8 +30,12 @@ export default function SheetPreviewModal({ sheets, initialIndex, teamId, onClos
   const [signedUrl, setSignedUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [contentShown, setContentShown] = useState(false);
+  const markContentShown = useCallback(() => setContentShown(true), []);
 
   const sheet = sheets[index];
+  // 원본이 뜰 때까지 목록에서 이미 받아 둔 썸네일을 대신 보여준다.
+  const placeholderUrl = sheet?.thumbnail_url ? getCachedSignedUrl(sheet.thumbnail_url) : null;
 
   // 미리보기가 열려있는 동안 뒤쪽 페이지가 같이 스크롤되지 않도록 막는다.
   // iOS Safari는 overflow:hidden만으로는 배경이 여전히 스크롤/바운스될 수 있어서
@@ -73,6 +79,7 @@ export default function SheetPreviewModal({ sheets, initialIndex, teamId, onClos
       setLoading(true);
       setError(null);
       setSignedUrl(null);
+      setContentShown(false);
 
       if (!sheet?.file_url) {
         setLoading(false);
@@ -80,7 +87,10 @@ export default function SheetPreviewModal({ sheets, initialIndex, teamId, onClos
         return;
       }
 
-      const url = await getSignedSheetUrl(sheet.file_url).catch(() => null);
+      // 같은 URL을 다시 쓰면 다시 열 때 브라우저 캐시에서 바로 나온다. 서명이 매번 달라지면 캐시가 안 맞는다.
+      const cachedUrl = getCachedSignedUrl(sheet.file_url);
+      const url = cachedUrl ?? (await getSignedSheetUrl(sheet.file_url).catch(() => null));
+      if (url && !cachedUrl) setCachedSignedUrl(sheet.file_url, url);
 
       if (cancelled) return;
       setLoading(false);
@@ -163,7 +173,21 @@ export default function SheetPreviewModal({ sheets, initialIndex, teamId, onClos
             className="relative bg-white rounded-lg overflow-hidden flex items-center justify-center w-full h-[85vh]"
             onClick={(e) => e.stopPropagation()}
           >
-            {loading && <p className="text-sm text-gray-400">불러오는 중...</p>}
+            {!contentShown && !error && (
+              <>
+                {placeholderUrl && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={placeholderUrl}
+                    alt=""
+                    className="absolute inset-0 z-20 w-full h-full object-contain bg-white pointer-events-none"
+                  />
+                )}
+                <p className="absolute bottom-3 z-20 text-xs text-white bg-black/60 rounded-full px-3 py-1 pointer-events-none">
+                  불러오는 중...
+                </p>
+              </>
+            )}
             {!loading && error && <p className="text-sm text-red-500 px-6 text-center">{error}</p>}
             {!loading && !error && signedUrl && actualSheetId && (
               <>
@@ -174,6 +198,8 @@ export default function SheetPreviewModal({ sheets, initialIndex, teamId, onClos
                         하나의 좌우 동작으로 이어붙인다. */}
                     <PdfPageViewer
                       src={signedUrl}
+                      onFirstPage={markContentShown}
+                      onReady={markContentShown}
                       onOverswipe={(direction) => (direction === 'next' ? goNext() : goPrev())}
                     />
                     <DrawingLayer sheetId={actualSheetId} teamId={teamId} />
@@ -184,6 +210,7 @@ export default function SheetPreviewModal({ sheets, initialIndex, teamId, onClos
                     alt={sheet.title}
                     sheetId={actualSheetId}
                     teamId={teamId}
+                    onReady={markContentShown}
                   />
                 )}
               </>

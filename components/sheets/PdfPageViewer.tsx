@@ -12,6 +12,8 @@ interface PdfPageViewerProps {
   // 연주 모드에서 모든 곡을 미리 렌더링해둘 때, 이 곡의 렌더링이 (성공이든
   // 실패든) 끝났음을 상위 컴포넌트에 알리기 위한 콜백.
   onReady?: () => void;
+  // 첫 쪽이 화면에 나온 시점. 여러 쪽짜리는 onReady보다 훨씬 먼저 온다.
+  onFirstPage?: () => void;
   // 이미 첫/마지막 페이지인 상태에서 그 방향으로 스와이프를 한 번 더 하면 호출된다.
   // 상위 컴포넌트가 이걸 받아 "이전/다음 곡"으로 넘어가는 데 쓸 수 있다 — 페이지
   // 넘기기와 곡 넘기기를 하나의 좌우 동작으로 이어붙이는 용도.
@@ -31,7 +33,7 @@ const SWIPE_THRESHOLD = 60;
 // 지금은 한 번에 한 페이지만 컨테이너 전체 크기로 보여주고, 좌우 스와이프로만
 // 페이지를 넘기는 방식으로 바뀌었다(버튼 없음) — 페이지별로 캔버스를 미리 다
 // 그려서 배열에 들고 있다가, 화면에는 현재 페이지의 캔버스 하나만 붙인다.
-export default function PdfPageViewer({ src, sheetId, updatedAt, onReady, onOverswipe }: PdfPageViewerProps) {
+export default function PdfPageViewer({ src, sheetId, updatedAt, onReady, onFirstPage, onOverswipe }: PdfPageViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const pageSlotRef = useRef<HTMLDivElement>(null);
   const canvasesRef = useRef<HTMLCanvasElement[]>([]);
@@ -62,6 +64,8 @@ export default function PdfPageViewer({ src, sheetId, updatedAt, onReady, onOver
     // 화면 크기가 바뀌어도(기기 회전 등) 보고 있던 페이지가 유지된다.
     pageIndexRef.current = 0;
     setPageIndex(0);
+    canvasesRef.current = [];
+    setPageCount(0);
 
     // 초기 로드와 ResizeObserver의 최초 콜백이 거의 동시에 render()를 부를 수 있어서,
     // 세대(generation) 번호로 뒤늦게 끝나는 이전 호출의 결과물이 DOM에 붙지 않도록 막는다.
@@ -158,6 +162,16 @@ export default function PdfPageViewer({ src, sheetId, updatedAt, onReady, onOver
           ctx.drawImage(fullCanvas, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
 
           newCanvases.push(canvas);
+
+          // 처음 여는 문서면 나머지 쪽을 기다리지 않고 첫 쪽부터 보여준다.
+          if (pageNumber === 1) {
+            if (canvasesRef.current.length === 0) {
+              canvasesRef.current = [canvas];
+              showPage(0);
+              setLoading(false);
+            }
+            onFirstPage?.();
+          }
         }
 
         if (renderIdRef.current !== myRenderId) return;
