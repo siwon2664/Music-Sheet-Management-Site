@@ -4,6 +4,7 @@ import { useEffect, useState, type DragEvent as ReactDragEvent, type FormEvent }
 import { UploadCloud, X } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { uploadSheetFile } from '@/lib/sheetUpload';
+import { getSignedSheetUrl, removeSheetFiles } from '@/lib/sheetStorage';
 import { isAllowedSheetFile, SHEET_FILE_ACCEPT, SHEET_FILE_TYPE_HINT } from '@/lib/fileTypes';
 import { composePagesIntoFile, expandFileToPages, revokePagePreview, type PendingPage } from '@/lib/pageCompose';
 import PageThumbStrip from './PageThumbStrip';
@@ -60,8 +61,11 @@ export default function EditSheetModal({ sheet, teamId, onClose, onUpdated }: Ed
       setPagesLoading(true);
       setLoadError(false);
       try {
-        const { data, error: downloadError } = await supabase.storage.from('sheets').download(sheet.file_url);
-        if (downloadError || !data) throw downloadError ?? new Error('download failed');
+        const signedUrl = await getSignedSheetUrl(sheet.file_url);
+        if (!signedUrl) throw new Error('signed url 발급 실패');
+        const response = await fetch(signedUrl);
+        if (!response.ok) throw new Error('download failed');
+        const data = await response.blob();
 
         const fileName = sheet.file_url.split('/').pop() || 'sheet';
         const existingFile = new File([data], fileName, { type: guessMimeType(sheet.file_url) });
@@ -155,7 +159,7 @@ export default function EditSheetModal({ sheet, teamId, onClose, onUpdated }: Ed
           return;
         }
 
-        const { data: uploadedFile, error: uploadError } = await uploadSheetFile(supabase, teamId, composedFile);
+        const { data: uploadedFile, error: uploadError } = await uploadSheetFile(teamId, composedFile);
         if (uploadError || !uploadedFile) {
           setLoading(false);
           setError(uploadError ?? '파일을 업로드하지 못했습니다.');
@@ -182,6 +186,19 @@ export default function EditSheetModal({ sheet, teamId, onClose, onUpdated }: Ed
     if (updateError) {
       setError(updateError.message);
       return;
+    }
+
+    // 파일을 새로 올렸거나(fileFields 존재) 모든 페이지를 지웠다면, 교체되기 전의
+    // 원본/썸네일은 더 이상 아무 데서도 참조되지 않으므로 Storage에서 지운다.
+    // DB 업데이트가 이미 성공한 뒤라 여기서 실패해도 조용히 넘어간다 — 남는
+    // 파일은 findOrphanedStorage 스크립트로 나중에 정리할 수 있다.
+    if (fileFields) {
+      const stalePaths = [sheet.file_url, sheet.thumbnail_url].filter(
+        (p): p is string => !!p
+      );
+      if (stalePaths.length > 0) {
+        void removeSheetFiles(stalePaths);
+      }
     }
 
     onUpdated(updated);

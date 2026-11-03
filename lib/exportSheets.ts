@@ -2,6 +2,7 @@ import { PDFDocument } from 'pdf-lib';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/types/supabase';
 import { isPdfFile } from './storage';
+import { getSignedSheetUrl } from './sheetStorage';
 import { detectContentBoxForImageUrl, type ContentBoxFraction } from './contentBox';
 import { detectPdfPageContentBox } from './pdfContentBox';
 
@@ -207,16 +208,13 @@ export async function renderSheetForExport(
   source: ExportSheetSource,
   options: ExportOptions
 ): Promise<RenderedSheet> {
-  const { data: signedData, error: signError } = await supabase.storage
-    .from('sheets')
-    .createSignedUrl(source.fileUrl, 600);
+  const url = await getSignedSheetUrl(source.fileUrl).catch(() => null);
 
-  if (signError || !signedData) {
-    throw new Error(signError?.message ?? `${source.title}: 파일을 불러오지 못했습니다.`);
+  if (!url) {
+    throw new Error(`${source.title}: 파일을 불러오지 못했습니다.`);
   }
 
   const strokes = options.includeMarkup ? await loadUserStrokes(supabase, source.id) : [];
-  const url = signedData.signedUrl;
 
   const pages = isPdfFile(source.fileUrl)
     ? await renderPdfSheet(url, strokes)

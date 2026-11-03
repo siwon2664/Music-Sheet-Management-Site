@@ -5,6 +5,7 @@ import { Check } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { isPdfFile } from '@/lib/storage';
 import { cacheDrawing, cacheSheetFile, getCachedSheetFile } from '@/lib/offlineSheetCache';
+import { getSignedSheetUrls } from '@/lib/sheetStorage';
 import PdfPageViewer from '@/components/sheets/PdfPageViewer';
 import DrawingLayer from '@/components/sheets/DrawingLayer';
 import ImageDrawingStage from '@/components/sheets/ImageDrawingStage';
@@ -153,15 +154,10 @@ export default function PerformanceMode({ items, teamId, initialIndex = 0, onClo
       // 곡마다 캐시 폴백을 시도한다.
       if (navigator.onLine) {
         try {
-          const { data } = await supabase.storage
-            .from('sheets')
-            .createSignedUrls(
-              targets.map((it) => it.fileUrl),
-              60 * 60
-            );
-          if (!cancelled && data) {
+          const urls = await getSignedSheetUrls(targets.map((it) => it.fileUrl));
+          if (!cancelled) {
             targets.forEach((it, i) => {
-              const url = data[i]?.signedUrl;
+              const url = urls[i];
               if (url) signedUrlMap[it.id] = url;
             });
           }

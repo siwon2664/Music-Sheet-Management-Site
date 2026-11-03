@@ -44,3 +44,6 @@ yarn-error.log*
 # claude code local state (machine-specific settings and worktree checkouts)
 .claude/settings.local.json
 .claude/worktrees/
+
+# 용량 정리용으로 Supabase에서 내려받은 악보 백업 (R2 이전 후 삭제)
+/migration-staging/

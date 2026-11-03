@@ -472,7 +472,6 @@ export default function SetlistEditor({
 
     try {
       const { blob, skipped } = await exportSetlistToPdf(
-        supabase,
         items.map((item) => ({ title: item.title, fileUrl: item.fileUrl, note: item.note })),
         { includeNotes }
       );

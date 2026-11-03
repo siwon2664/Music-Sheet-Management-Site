@@ -150,7 +150,7 @@ export default function UploadSheetModal({
       return;
     }
 
-    const { data: uploadedFile, error: uploadError } = await uploadSheetFile(supabase, teamId, composedFile);
+    const { data: uploadedFile, error: uploadError } = await uploadSheetFile(teamId, composedFile);
 
     if (uploadError || !uploadedFile) {
       setLoading(false);

@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
-import { createClient } from '@/lib/supabase/client';
 import { isPdfFile } from '@/lib/storage';
+import { getSignedSheetUrl } from '@/lib/sheetStorage';
 import DrawingLayer from './DrawingLayer';
 import ImageDrawingStage from './ImageDrawingStage';
 import PdfPageViewer from './PdfPageViewer';
@@ -24,8 +24,6 @@ interface SheetPreviewModalProps {
 }
 
 export default function SheetPreviewModal({ sheets, initialIndex, teamId, onClose }: SheetPreviewModalProps) {
-  const supabase = createClient();
-
   const [index, setIndex] = useState(initialIndex);
   const [signedUrl, setSignedUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -82,19 +80,17 @@ export default function SheetPreviewModal({ sheets, initialIndex, teamId, onClos
         return;
       }
 
-      const { data, error: signError } = await supabase.storage
-        .from('sheets')
-        .createSignedUrl(sheet.file_url, 60 * 10);
+      const url = await getSignedSheetUrl(sheet.file_url).catch(() => null);
 
       if (cancelled) return;
       setLoading(false);
 
-      if (signError || !data) {
-        setError(signError?.message ?? '파일을 불러올 수 없습니다.');
+      if (!url) {
+        setError('파일을 불러올 수 없습니다.');
         return;
       }
 
-      setSignedUrl(data.signedUrl);
+      setSignedUrl(url);
     }
 
     loadPreview();

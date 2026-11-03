@@ -1,7 +1,6 @@
 import { PDFDocument } from 'pdf-lib';
-import type { SupabaseClient } from '@supabase/supabase-js';
-import type { Database } from '@/types/supabase';
 import { isPdfFile } from './storage';
+import { getSignedSheetUrls } from './sheetStorage';
 
 export interface ExportSetlistItem {
   title: string;
@@ -129,7 +128,6 @@ async function renderNoteToPng(title: string, note: string): Promise<{ pngBytes:
 }
 
 export async function exportSetlistToPdf(
-  supabase: SupabaseClient<Database>,
   items: ExportSetlistItem[],
   options: ExportOptions
 ): Promise<ExportResult> {
@@ -139,15 +137,10 @@ export async function exportSetlistToPdf(
     throw new Error('다운로드할 악보가 없습니다.');
   }
 
-  const { data: signedUrlsData, error: signError } = await supabase.storage
-    .from('sheets')
-    .createSignedUrls(
-      validItems.map((it) => it.fileUrl),
-      600
-    );
+  const signedUrls = await getSignedSheetUrls(validItems.map((it) => it.fileUrl)).catch(() => null);
 
-  if (signError || !signedUrlsData) {
-    throw new Error(signError?.message ?? '악보 파일을 불러오지 못했습니다.');
+  if (!signedUrls) {
+    throw new Error('악보 파일을 불러오지 못했습니다.');
   }
 
   const mergedDoc = await PDFDocument.create();
@@ -155,7 +148,7 @@ export async function exportSetlistToPdf(
 
   for (let i = 0; i < validItems.length; i++) {
     const item = validItems[i];
-    const url = signedUrlsData[i]?.signedUrl;
+    const url = signedUrls[i];
     if (!url) {
       skipped.push(item.title);
       continue;

@@ -21,6 +21,7 @@ import { isPdfFile, stripFileExtension } from '@/lib/storage';
 import { uploadSheetFile } from '@/lib/sheetUpload';
 import { isExemptFromSheetLimit, MAX_SHEETS_PER_TEAM, SHEET_LIMIT_MESSAGE } from '@/lib/limits';
 import { getCachedSignedUrl, setCachedSignedUrl } from '@/lib/signedUrlCache';
+import { getSignedSheetUrls, removeSheetFiles } from '@/lib/sheetStorage';
 import { exportSheetsAsMergedPdf, exportSheetsAsSeparatePdfs, type ExportSheetSource } from '@/lib/exportSheets';
 import type { TeamRole } from '@/types/supabase';
 import UploadSheetModal from './UploadSheetModal';
@@ -132,16 +133,14 @@ export default function SheetsLibraryClient({ teamId, teamName, role, initialShe
 
       if (uncached.length === 0) return;
 
-      const { data } = await supabase.storage
-        .from('sheets')
-        .createSignedUrls(uncached.map((item) => item.path), 60 * 60);
+      const urls = await getSignedSheetUrls(uncached.map((item) => item.path));
 
-      if (cancelled || !data) return;
+      if (cancelled) return;
 
       setThumbnailUrls((prev) => {
         const next = { ...prev };
         uncached.forEach((item, i) => {
-          const signedUrl = data[i]?.signedUrl;
+          const signedUrl = urls[i];
           if (signedUrl) {
             next[item.sheetId] = signedUrl;
             setCachedSignedUrl(item.path, signedUrl);
@@ -186,6 +185,18 @@ export default function SheetsLibraryClient({ teamId, teamName, role, initialShe
     });
   }
 
+  // DB 행 삭제만으로는 Storage의 실제 파일(원본/썸네일)이 지워지지 않으므로
+  // 함께 지운다. Storage 삭제가 실패해도(이미 지워졌거나 권한 문제) DB 삭제는
+  // 이미 끝난 뒤라 조용히 넘어간다 — 남는 파일은 findOrphanedStorage 스크립트로
+  // 나중에 정리할 수 있다.
+  async function removeStorageFiles(sheetsToRemove: SheetRow[]) {
+    const paths = sheetsToRemove.flatMap((sheet) =>
+      [sheet.file_url, sheet.thumbnail_url].filter((p): p is string => !!p)
+    );
+    if (paths.length === 0) return;
+    await removeSheetFiles(paths);
+  }
+
   async function handleDeleteSelected() {
     if (selectedIds.size === 0) return;
     if (!confirm(`선택한 악보 ${selectedIds.size}개를 삭제할까요?`)) return;
@@ -194,6 +205,7 @@ export default function SheetsLibraryClient({ teamId, teamName, role, initialShe
     setError(null);
 
     const ids = Array.from(selectedIds);
+    const sheetsToRemove = sheets.filter((sheet) => selectedIds.has(sheet.id));
     const { error: deleteError } = await supabase.from('sheets').delete().in('id', ids);
 
     setDeleting(false);
@@ -202,6 +214,8 @@ export default function SheetsLibraryClient({ teamId, teamName, role, initialShe
       setError(deleteError.message);
       return;
     }
+
+    void removeStorageFiles(sheetsToRemove);
 
     setSheets((prev) => prev.filter((sheet) => !selectedIds.has(sheet.id)));
     setSelectedIds(new Set());
@@ -223,6 +237,8 @@ export default function SheetsLibraryClient({ teamId, teamName, role, initialShe
       setError(deleteError.message);
       return;
     }
+
+    void removeStorageFiles([sheet]);
 
     setSheets((prev) => prev.filter((s) => s.id !== sheet.id));
     setSelectedIds((prev) => {
@@ -345,7 +361,7 @@ export default function SheetsLibraryClient({ teamId, teamName, role, initialShe
     const failed: string[] = skippedFiles.map((file) => `${file.name}: ${SHEET_LIMIT_MESSAGE}`);
 
     for (const file of filesToUpload) {
-      const { data: uploadedFile, error: uploadError } = await uploadSheetFile(supabase, teamId, file);
+      const { data: uploadedFile, error: uploadError } = await uploadSheetFile(teamId, file);
 
       if (uploadError || !uploadedFile) {
         failed.push(`${file.name}: ${uploadError ?? '업로드에 실패했습니다.'}`);
