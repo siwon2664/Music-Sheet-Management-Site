@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
+import { type DragEvent, memo, type MutableRefObject, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ArrowDown,
@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { matchesSearch } from '@/lib/hangul';
+import { keyFromTitle } from '@/lib/setlist';
 import { isPdfFile, stripFileExtension } from '@/lib/storage';
 import { uploadSheetFile } from '@/lib/sheetUpload';
 import { isExemptFromSheetLimit, MAX_SHEETS_PER_TEAM, SHEET_LIMIT_MESSAGE } from '@/lib/limits';
@@ -59,6 +60,8 @@ export default function SheetsLibraryClient({ teamId, teamName, role, initialShe
 
   const [sheets, setSheets] = useState(initialSheets);
   const [query, setQuery] = useState('');
+  // 곡이 수백 개면 필터링과 렌더링이 타이핑을 막으므로 입력보다 늦게 따라오게 한다.
+  const deferredQuery = useDeferredValue(query);
   const [sortKey, setSortKey] = useState<SortKey>('title');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -80,12 +83,19 @@ export default function SheetsLibraryClient({ teamId, teamName, role, initialShe
   const [downloading, setDownloading] = useState<{ done: number; total: number } | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
 
+  const rowActions = useRef<SheetRowActions>({
+    preview: () => {},
+    toggleSelect: () => {},
+    edit: () => {},
+    remove: () => {},
+  });
+
   const canDelete = role === 'LEADER';
   const sheetLimitExempt = isExemptFromSheetLimit(teamName);
   const sheetLimitReached = !sheetLimitExempt && sheets.length >= MAX_SHEETS_PER_TEAM;
 
   const filteredSorted = useMemo(() => {
-    const filtered = sheets.filter((sheet) => matchesSearch(sheet.title, query));
+    const filtered = sheets.filter((sheet) => matchesSearch(sheet.title, deferredQuery));
     const sorted = [...filtered].sort((a, b) =>
       sortKey === 'title'
         ? a.title.localeCompare(b.title, 'ko')
@@ -93,7 +103,7 @@ export default function SheetsLibraryClient({ teamId, teamName, role, initialShe
     );
     if (sortDirection === 'desc') sorted.reverse();
     return sorted;
-  }, [sheets, query, sortKey, sortDirection]);
+  }, [sheets, deferredQuery, sortKey, sortDirection]);
 
   const selectedSheets = useMemo(
     () => filteredSorted.filter((sheet) => selectedIds.has(sheet.id)),
@@ -434,6 +444,14 @@ export default function SheetsLibraryClient({ teamId, teamName, role, initialShe
     return sortDirection === 'asc' ? <ArrowUp size={14} /> : <ArrowDown size={14} />;
   }
 
+
+  rowActions.current = {
+    preview: setPreviewIndex,
+    toggleSelect,
+    edit: setEditingSheet,
+    remove: handleDeleteSingle,
+  };
+
   return (
     <div
       className="relative flex flex-col gap-4"
@@ -530,12 +548,20 @@ export default function SheetsLibraryClient({ teamId, teamName, role, initialShe
 
       {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
 
-      <div className="bg-surface border border-border rounded-lg overflow-x-auto">
+      <div className="bg-surface border border-border rounded-lg">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-surface-hover text-left text-muted">
-              <th className="w-10 px-4 py-3">
-                <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} />
+              <th className="w-10 p-0">
+                <label className="flex items-center justify-center w-11 h-11 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    aria-label="전체 선택"
+                    className="w-4 h-4"
+                    checked={allSelected}
+                    onChange={toggleSelectAll}
+                  />
+                </label>
               </th>
               <th className="px-2 py-3">
                 <button
@@ -546,10 +572,10 @@ export default function SheetsLibraryClient({ teamId, teamName, role, initialShe
                   제목 {renderSortIcon('title')}
                 </button>
               </th>
-              <th className="px-2 py-3 font-medium">작곡가</th>
-              <th className="px-2 py-3 font-medium">Key</th>
-              <th className="px-2 py-3 font-medium">BPM</th>
-              <th className="px-2 py-3">
+              <th className="hidden md:table-cell px-2 py-3 font-medium">작곡가</th>
+              <th className="hidden md:table-cell px-2 py-3 font-medium">Key</th>
+              <th className="hidden md:table-cell px-2 py-3 font-medium">BPM</th>
+              <th className="hidden md:table-cell px-2 py-3">
                 <button
                   type="button"
                   onClick={() => toggleSort('created_at')}
@@ -558,63 +584,20 @@ export default function SheetsLibraryClient({ teamId, teamName, role, initialShe
                   등록일 {renderSortIcon('created_at')}
                 </button>
               </th>
-              <th className="w-10 px-2 py-3">
-                <span className="sr-only">관리</span>
-              </th>
+              <th className="w-10 px-2 py-3" aria-label="관리" />
             </tr>
           </thead>
           <tbody>
             {filteredSorted.map((sheet, index) => (
-              <tr
+              <SheetTableRow
                 key={sheet.id}
-                onClick={() => setPreviewIndex(index)}
-                className="border-b border-border last:border-b-0 hover:bg-surface-hover cursor-pointer"
-              >
-                <td className="px-4 py-3 align-top" onClick={(e) => e.stopPropagation()}>
-                  <input
-                    type="checkbox"
-                    checked={selectedIds.has(sheet.id)}
-                    onChange={() => toggleSelect(sheet.id)}
-                  />
-                </td>
-                <td className="px-2 py-3 align-top">
-                  <div className="flex items-start gap-2">
-                    <SheetThumbnail
-                      title={sheet.title}
-                      fileUrl={sheet.file_url}
-                      thumbnailUrl={sheet.thumbnail_url}
-                      signedUrl={thumbnailUrls[sheet.id]}
-                    />
-                    <div className="min-w-0">
-                      <p className="font-medium truncate">{sheet.title}</p>
-                      {sheet.tags.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mt-1">
-                          {sheet.tags.map((tag) => (
-                            <span
-                              key={tag}
-                              className="text-[10px] text-muted bg-surface-hover rounded-full px-2 py-0.5"
-                            >
-                              #{tag}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </td>
-                <td className="px-2 py-3 align-top text-muted">{sheet.composer ?? '-'}</td>
-                <td className="px-2 py-3 align-top text-muted">{sheet.key ?? '-'}</td>
-                <td className="px-2 py-3 align-top text-muted">{sheet.bpm ?? '-'}</td>
-                <td className="px-2 py-3 align-top text-muted">
-                  {new Date(sheet.created_at).toLocaleDateString('ko-KR', { timeZone: SERVICE_TIME_ZONE })}
-                </td>
-                <td className="px-2 py-3 align-top text-right" onClick={(e) => e.stopPropagation()}>
-                  <SheetRowMenu
-                    onEdit={() => setEditingSheet(sheet)}
-                    onDelete={canDelete ? () => handleDeleteSingle(sheet) : undefined}
-                  />
-                </td>
-              </tr>
+                sheet={sheet}
+                index={index}
+                selected={selectedIds.has(sheet.id)}
+                signedUrl={thumbnailUrls[sheet.id]}
+                canDelete={canDelete}
+                actions={rowActions}
+              />
             ))}
 
             {filteredSorted.length === 0 && (
@@ -756,6 +739,95 @@ interface SheetRowMenuProps {
   onDelete?: () => void;
 }
 
+interface SheetRowActions {
+  preview: (index: number) => void;
+  toggleSelect: (id: string) => void;
+  edit: (sheet: SheetRow) => void;
+  remove: (sheet: SheetRow) => void;
+}
+
+interface SheetTableRowProps {
+  sheet: SheetRow;
+  index: number;
+  selected: boolean;
+  signedUrl?: string;
+  canDelete: boolean;
+  actions: MutableRefObject<SheetRowActions>;
+}
+
+// memo: 체크박스 하나를 눌러도 수백 개 행을 전부 다시 그리지 않게 한다. 핸들러는 ref로
+// 받아서 부모가 다시 렌더링돼도 이 행의 props가 바뀌지 않는다.
+const SheetTableRow = memo(function SheetTableRow({
+  sheet,
+  index,
+  selected,
+  signedUrl,
+  canDelete,
+  actions,
+}: SheetTableRowProps) {
+  const sheetKey = sheet.key ?? keyFromTitle(sheet.title);
+
+  return (
+    <tr
+      onClick={() => actions.current.preview(index)}
+      className="border-b border-border last:border-b-0 hover:bg-surface-hover cursor-pointer"
+    >
+      {/* 작은 체크박스를 정확히 못 눌러도 되게 칸 전체를 라벨로 만든다. */}
+      <td className="p-0 align-top" onClick={(e) => e.stopPropagation()}>
+        <label className="flex items-center justify-center w-11 h-14 cursor-pointer">
+          <input
+            type="checkbox"
+            aria-label={`${sheet.title} 선택`}
+            className="w-4 h-4"
+            checked={selected}
+            onChange={() => actions.current.toggleSelect(sheet.id)}
+          />
+        </label>
+      </td>
+      <td className="px-2 py-2 align-top">
+        <div className="flex items-start gap-2">
+          <SheetThumbnail
+            title={sheet.title}
+            fileUrl={sheet.file_url}
+            thumbnailUrl={sheet.thumbnail_url}
+            signedUrl={signedUrl}
+          />
+          <div className="min-w-0">
+            <p className="font-medium [overflow-wrap:anywhere]">{sheet.title}</p>
+            {/* 모바일에서는 칸을 숨기는 대신 제목 아래에 보여준다. */}
+            {(sheetKey || sheet.bpm) && (
+              <p className="md:hidden text-xs text-muted mt-0.5">
+                {[sheetKey, sheet.bpm ? `${sheet.bpm} BPM` : null].filter(Boolean).join(' · ')}
+              </p>
+            )}
+            {sheet.tags.length > 0 && (
+              <div className="flex flex-wrap gap-1 mt-1">
+                {sheet.tags.map((tag) => (
+                  <span key={tag} className="text-[10px] text-muted bg-surface-hover rounded-full px-2 py-0.5">
+                    #{tag}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </td>
+      <td className="hidden md:table-cell px-2 py-3 align-top text-muted">{sheet.composer ?? '-'}</td>
+      <td className="hidden md:table-cell px-2 py-3 align-top text-muted">{sheetKey ?? '-'}</td>
+      <td className="hidden md:table-cell px-2 py-3 align-top text-muted">{sheet.bpm ?? '-'}</td>
+      <td className="hidden md:table-cell px-2 py-3 align-top text-muted whitespace-nowrap">
+        {new Date(sheet.created_at).toLocaleDateString('ko-KR', { timeZone: SERVICE_TIME_ZONE })}
+      </td>
+      <td className="px-1 py-2 align-top text-right" onClick={(e) => e.stopPropagation()}>
+        <SheetRowMenu
+          onEdit={() => actions.current.edit(sheet)}
+          onDelete={canDelete ? () => actions.current.remove(sheet) : undefined}
+        />
+      </td>
+    </tr>
+  );
+});
+
 // 각 행 끝의 ⋮ 버튼 — 체크박스로 선택하지 않아도 그 행 하나만 바로 수정/삭제할 수 있게 한다.
 function SheetRowMenu({ onEdit, onDelete }: SheetRowMenuProps) {
   const [open, setOpen] = useState(false);
@@ -779,7 +851,7 @@ function SheetRowMenu({ onEdit, onDelete }: SheetRowMenuProps) {
       <button
         type="button"
         onClick={() => setOpen((prev) => !prev)}
-        className="flex items-center justify-center w-7 h-7 rounded text-muted hover:text-foreground hover:bg-surface-hover"
+        className="flex items-center justify-center w-10 h-10 rounded text-muted hover:text-foreground hover:bg-surface-hover"
         aria-label="더보기"
         aria-haspopup="menu"
         aria-expanded={open}

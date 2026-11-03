@@ -56,6 +56,9 @@ export default function SheetThumbnail({
       <img
         src={signedUrl}
         alt={title}
+        // 곡이 수백 개라 화면에 보이는 것만 받는다.
+        loading="lazy"
+        decoding="async"
         className={`${sizeClass} shrink-0 rounded border border-border ${
           fit === 'contain' ? 'object-contain bg-surface' : 'object-cover'
         }`}
