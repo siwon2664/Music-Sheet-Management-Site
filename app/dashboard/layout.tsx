@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabase/server';
+import { createClient, getCurrentUser } from '@/lib/supabase/server';
 import { resolveActiveTeam } from '@/lib/activeTeam';
 import MobileBottomNav from '@/components/dashboard/MobileBottomNav';
 
@@ -11,9 +11,7 @@ import MobileBottomNav from '@/components/dashboard/MobileBottomNav';
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
 
   if (!user) {
     redirect('/login');

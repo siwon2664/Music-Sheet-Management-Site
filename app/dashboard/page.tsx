@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabase/server';
+import { createClient, getCurrentUser } from '@/lib/supabase/server';
 import { resolveActiveTeam } from '@/lib/activeTeam';
 import { todayKeyInKorea } from '@/lib/koreaTime';
 import CreateTeamForm from '@/components/team/CreateTeamForm';
@@ -30,9 +30,7 @@ export default async function DashboardPage({
 }) {
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
 
   if (!user) {
     redirect('/login');

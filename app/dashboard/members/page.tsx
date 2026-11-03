@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabase/server';
+import { createClient, getCurrentUser } from '@/lib/supabase/server';
 import { resolveActiveTeam } from '@/lib/activeTeam';
 import MembersManager, { type MemberRow } from '@/components/dashboard/members/MembersManager';
 import InviteLinkSection from '@/components/team/InviteLinkSection';
@@ -8,9 +8,7 @@ import InviteLinkSection from '@/components/team/InviteLinkSection';
 export default async function MembersPage() {
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
 
   if (!user) {
     redirect('/login');

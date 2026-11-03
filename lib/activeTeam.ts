@@ -1,4 +1,5 @@
 import { cookies } from 'next/headers';
+import { cache } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, TeamRole } from '@/types/supabase';
 
@@ -20,10 +21,10 @@ export interface ActiveTeamResult {
 // 각자 "가입한 첫 팀"을 따로 조회하던 이전 방식은, 유저가 여러 팀에 속했을 때
 // 화면 간에 서로 다른 팀 데이터를 보여주는 버그로 이어졌다. 이제 이 함수 하나만
 // 대시보드 하위 페이지들이 공통으로 사용해서 "현재 팀"을 통일한다.
-export async function resolveActiveTeam(
+export const resolveActiveTeam = cache(async (
   supabase: SupabaseClient<Database>,
   userId: string
-): Promise<ActiveTeamResult> {
+): Promise<ActiveTeamResult> => {
   const { data: memberships } = await supabase
     .from('team_members')
     .select('team_id, role, joined_at, teams(name, created_by)')
@@ -49,4 +50,4 @@ export async function resolveActiveTeam(
   const active = (activeId && teams.find((t) => t.id === activeId)) || teams[0];
 
   return { activeTeam: active, teams };
-}
+});

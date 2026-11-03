@@ -1,7 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { memo, useDeferredValue, useMemo, useState } from 'react';
+import { memo, startTransition, useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { ChevronDown, ChevronUp, GripVertical, Plus, Search } from 'lucide-react';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
 import { matchesSearch } from '@/lib/hangul';
@@ -13,6 +13,8 @@ const SheetPreviewModal = dynamic(() => import('@/components/sheets/SheetPreview
 // SetlistEditor의 onDragEnd/onDragOver가 이 id를 보고 "라이브러리 쪽으로 돌아왔는지"
 // (라이브러리 카드면 무시) 또는 "콘티 곡을 여기로 가져왔는지"(삭제 확인)를 구분한다.
 export const LIBRARY_DROP_ID = 'library-drop-zone';
+
+const INITIAL_CARD_COUNT = 30;
 
 export interface LibrarySheet {
   id: string;
@@ -55,6 +57,13 @@ function SheetLibraryPanel({
   const [activeTag, setActiveTag] = useState<string | null>(null);
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
   const [collapsed, setCollapsed] = useState(false);
+
+  // 전체 카드를 한 번에 그리면 편집 화면이 늦게 뜨므로 첫 화면을 먼저 보여주고 나머지는 뒤에서 그린다.
+  const [cardLimit, setCardLimit] = useState(INITIAL_CARD_COUNT);
+  useEffect(() => {
+    const timer = setTimeout(() => startTransition(() => setCardLimit(Infinity)));
+    return () => clearTimeout(timer);
+  }, []);
 
   const allTags = useMemo(() => {
     const set = new Set<string>();
@@ -148,7 +157,7 @@ function SheetLibraryPanel({
 
       {!collapsed && (
         <div className="flex flex-col gap-2 overflow-y-auto max-h-[65vh] pr-1">
-          {filtered.map((sheet, index) => (
+          {filtered.slice(0, cardLimit).map((sheet, index) => (
             <DraggableSheetCard
               key={sheet.id}
               sheet={sheet}

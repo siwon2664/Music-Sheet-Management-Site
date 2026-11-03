@@ -1,6 +1,6 @@
 'use client';
 
-import { type DragEvent, memo, type MutableRefObject, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { type DragEvent, memo, type MutableRefObject, startTransition, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import {
@@ -33,6 +33,8 @@ const UploadSheetModal = dynamic(() => import('./UploadSheetModal'), { ssr: fals
 const EditSheetModal = dynamic(() => import('./EditSheetModal'), { ssr: false });
 const CreateSetlistFromSelectionModal = dynamic(() => import('./CreateSetlistFromSelectionModal'), { ssr: false });
 const SheetPreviewModal = dynamic(() => import('./SheetPreviewModal'), { ssr: false });
+
+const INITIAL_ROW_COUNT = 40;
 
 export interface SheetRow {
   id: string;
@@ -95,6 +97,13 @@ export default function SheetsLibraryClient({ teamId, teamName, role, initialShe
   // 가장 자주 쓰는 미리보기는 첫 클릭부터 바로 열리도록 미리 받아 둔다.
   useEffect(() => {
     const timer = setTimeout(() => void import('./SheetPreviewModal'), 1500);
+    return () => clearTimeout(timer);
+  }, []);
+
+  // 전체 행을 한 번에 그리면 페이지가 멈춘 듯 보이므로 첫 화면을 먼저 보여주고 나머지는 뒤에서 그린다.
+  const [rowLimit, setRowLimit] = useState(INITIAL_ROW_COUNT);
+  useEffect(() => {
+    const timer = setTimeout(() => startTransition(() => setRowLimit(Infinity)));
     return () => clearTimeout(timer);
   }, []);
 
@@ -599,7 +608,7 @@ export default function SheetsLibraryClient({ teamId, teamName, role, initialShe
             </tr>
           </thead>
           <tbody>
-            {filteredSorted.map((sheet, index) => (
+            {filteredSorted.slice(0, rowLimit).map((sheet, index) => (
               <SheetTableRow
                 key={sheet.id}
                 sheet={sheet}

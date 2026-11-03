@@ -4,9 +4,11 @@
 
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { cookies } from 'next/headers';
+import { cache } from 'react';
 import type { Database } from '@/types/supabase';
 
-export async function createClient() {
+// cache: 한 요청을 그리는 동안 레이아웃과 페이지가 같은 클라이언트와 조회 결과를 함께 쓴다.
+export const createClient = cache(async () => {
   const cookieStore = await cookies();
 
   return createServerClient<Database>(
@@ -30,4 +32,12 @@ export async function createClient() {
       },
     }
   );
-}
+});
+
+export const getCurrentUser = cache(async () => {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  return user;
+});

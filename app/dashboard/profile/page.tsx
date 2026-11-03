@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { User } from 'lucide-react';
 import { redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabase/server';
+import { createClient, getCurrentUser } from '@/lib/supabase/server';
 import UpdateDisplayNameForm from '@/components/dashboard/profile/UpdateDisplayNameForm';
 import ChangePasswordForm from '@/components/dashboard/profile/ChangePasswordForm';
 import DeleteAccountSection from '@/components/dashboard/profile/DeleteAccountSection';
@@ -9,9 +9,7 @@ import DeleteAccountSection from '@/components/dashboard/profile/DeleteAccountSe
 export default async function ProfilePage() {
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
 
   if (!user || !user.email) {
     redirect('/login');

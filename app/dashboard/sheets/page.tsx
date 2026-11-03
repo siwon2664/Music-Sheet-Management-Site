@@ -1,15 +1,13 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabase/server';
+import { createClient, getCurrentUser } from '@/lib/supabase/server';
 import { resolveActiveTeam } from '@/lib/activeTeam';
 import SheetsLibraryClient from '@/components/sheets/SheetsLibraryClient';
 
 export default async function SheetsLibraryPage() {
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
 
   if (!user) {
     redirect('/login');

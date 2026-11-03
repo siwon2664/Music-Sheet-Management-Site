@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabase/server';
+import { createClient, getCurrentUser } from '@/lib/supabase/server';
 import SetlistEditor from '@/components/dashboard/setlist-editor/SetlistEditor';
 import type { LibrarySheet } from '@/components/dashboard/setlist-editor/SheetLibraryPanel';
 import type { SetlistItem } from '@/components/dashboard/setlist-editor/SetlistPanel';
@@ -8,9 +8,7 @@ import type { SetlistItem } from '@/components/dashboard/setlist-editor/SetlistP
 export default async function SetlistDetailPage({ params }: { params: { id: string } }) {
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
 
   if (!user) {
     redirect('/login');
