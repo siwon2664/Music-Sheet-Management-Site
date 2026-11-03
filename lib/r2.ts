@@ -34,9 +34,19 @@ function getClient(): S3Client {
   return client;
 }
 
-export async function getPresignedUploadUrl(key: string, contentType: string): Promise<string> {
-  const command = new PutObjectCommand({ Bucket: getBucketName(), Key: key, ContentType: contentType });
-  return getSignedUrl(getClient(), command, { expiresIn: UPLOAD_URL_TTL_SECONDS });
+// 형식과 크기를 서명에 포함해야 R2가 발급 때와 다른 업로드를 403으로 거부한다.
+// content-type은 signableHeaders로 지정하지 않으면 서명에서 빠져 PUT 때 바꿔치기할 수 있다.
+export async function getPresignedUploadUrl(key: string, contentType: string, size: number): Promise<string> {
+  const command = new PutObjectCommand({
+    Bucket: getBucketName(),
+    Key: key,
+    ContentType: contentType,
+    ContentLength: size,
+  });
+  return getSignedUrl(getClient(), command, {
+    expiresIn: UPLOAD_URL_TTL_SECONDS,
+    signableHeaders: new Set(['content-type']),
+  });
 }
 
 export async function getPresignedDownloadUrl(key: string): Promise<string> {

@@ -39,6 +39,7 @@ export async function uploadToR2(path: string, contentType: string, body: Blob):
   const { uploadUrl } = await postJson<{ uploadUrl: string }>('/api/storage/upload-url', {
     path,
     contentType,
+    size: body.size,
   });
 
   const putRes = await fetch(uploadUrl, {
