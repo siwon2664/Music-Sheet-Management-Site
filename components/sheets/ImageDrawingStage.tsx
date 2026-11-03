@@ -93,8 +93,8 @@ export default function ImageDrawingStage({
     });
   }
 
-  // 실제 표시용 이미지는 CORS 설정 없이 그대로 불러온다(항상 로드/표시가
-  // 보장되도록). 여백 감지는 별도의 익명 CORS 이미지로 시도하고, 지원되지
+  // 표시용 이미지는 CORS가 안 되는 환경에서도 항상 보이도록 실패 시 CORS 없이
+  // 다시 불러온다. 여백 감지는 별도의 익명 CORS 이미지로 시도하고, 지원되지
   // 않는 환경이면 조용히 원본 그대로(여백 트리밍 없이) 표시한다.
   //
   // 네트워크 우선, 실패 시(또는 처음부터 오프라인이면) 이 곡을 이전에
@@ -106,20 +106,28 @@ export default function ImageDrawingStage({
     setError(null);
     boxRef.current = FULL_CONTENT_BOX;
 
+    // R2는 요청에 Origin이 있을 때만 CORS 헤더를 붙인다. 표시용을 CORS 없이 먼저
+    // 불러오면 그 응답이 캐시되어 같은 URL의 여백 감지(익명 CORS) 요청이 실패하므로,
+    // 표시용도 CORS로 먼저 시도하고 실패하면 CORS 없이 다시 불러온다.
     function loadFrom(url: string, onFail: () => void) {
-      const img = new Image();
-      img.onload = () => {
-        if (cancelled) return;
-        imgRef.current = img;
-        setLoading(false);
-        render();
-        onReady?.();
-      };
-      img.onerror = () => {
-        if (cancelled) return;
-        onFail();
-      };
-      img.src = url;
+      function load(cors: boolean) {
+        const img = new Image();
+        if (cors) img.crossOrigin = 'anonymous';
+        img.onload = () => {
+          if (cancelled) return;
+          imgRef.current = img;
+          setLoading(false);
+          render();
+          onReady?.();
+        };
+        img.onerror = () => {
+          if (cancelled) return;
+          if (cors) load(false);
+          else onFail();
+        };
+        img.src = url;
+      }
+      load(true);
 
       detectContentBoxForImageUrl(url).then((box) => {
         if (cancelled) return;
