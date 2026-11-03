@@ -4,6 +4,7 @@ import { useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { X } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import { useEscapeKey } from '@/lib/useEscapeKey';
 
 interface CreateFixedSetlistModalProps {
   teamId: string;
@@ -16,6 +17,7 @@ export default function CreateFixedSetlistModal({ teamId, onClose }: CreateFixed
 
   const [title, setTitle] = useState('');
   const [loading, setLoading] = useState(false);
+  useEscapeKey(onClose, !loading);
   const [error, setError] = useState<string | null>(null);
 
   async function handleCreate(e: FormEvent) {

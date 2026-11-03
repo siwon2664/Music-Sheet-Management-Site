@@ -23,6 +23,7 @@ import { isPdfFile, stripFileExtension } from '@/lib/storage';
 import { isExemptFromSheetLimit, MAX_SHEETS_PER_TEAM, SHEET_LIMIT_MESSAGE } from '@/lib/limits';
 import { getCachedSignedUrl, setCachedSignedUrl } from '@/lib/signedUrlCache';
 import { SERVICE_TIME_ZONE } from '@/lib/koreaTime';
+import { useEscapeKey } from '@/lib/useEscapeKey';
 import { getSignedSheetUrls, removeSheetFiles } from '@/lib/sheetStorage';
 import type { ExportSheetSource } from '@/lib/exportSheets';
 import type { TeamRole } from '@/types/supabase';
@@ -106,6 +107,8 @@ export default function SheetsLibraryClient({ teamId, teamName, role, initialShe
     const timer = setTimeout(() => startTransition(() => setRowLimit(Infinity)));
     return () => clearTimeout(timer);
   }, []);
+
+  useEscapeKey(() => closeDownloadModal(), showDownloadModal && !downloading);
 
   const canDelete = role === 'LEADER';
   const sheetLimitExempt = isExemptFromSheetLimit(teamName);

@@ -18,11 +18,24 @@ interface PdfPageViewerProps {
   // 상위 컴포넌트가 이걸 받아 "이전/다음 곡"으로 넘어가는 데 쓸 수 있다 — 페이지
   // 넘기기와 곡 넘기기를 하나의 좌우 동작으로 이어붙이는 용도.
   onOverswipe?: (direction: 'next' | 'prev') => void;
+  // 연주 모드 전용: 화면 왼쪽·오른쪽 끝을 탭하면 쪽을 넘긴다. 미리보기는 탭이 필기와 겹쳐서 쓰지 않는다.
+  tapToTurn?: boolean;
+  // 상위가 페달·키보드 입력을 쪽 넘기기로 전달할 수 있게 넘기기 함수를 받아 간다.
+  onRegisterTurn?: (turn: (direction: 'next' | 'prev') => void) => void;
 }
 
 // 스와이프로 페이지를 넘길 때 쓰는 임계값. PerformanceMode의 곡 전환 스와이프와
 // 같은 값을 써서 두 제스처가 이어붙였을 때 체감 감도가 똑같게 맞춘다.
 const SWIPE_THRESHOLD = 60;
+const TAP_SLOP = 10;
+
+// 연주 중 실수로 넘어가지 않도록 가운데는 비워 두고 양쪽 30%만 넘기는 영역으로 쓴다.
+export function getTapZone(clientX: number, rect: DOMRect): 'next' | 'prev' | null {
+  const ratio = (clientX - rect.left) / rect.width;
+  if (ratio < 0.3) return 'prev';
+  if (ratio > 0.7) return 'next';
+  return null;
+}
 
 // 브라우저 내장 PDF 뷰어(iframe)는 파일마다 원본 페이지 크기에 따라 배율이 제각각이라
 // 악보마다 화면에 보이는 크기가 들쭉날쭉했다. pdf.js로 직접 캔버스에 그려서
@@ -33,7 +46,16 @@ const SWIPE_THRESHOLD = 60;
 // 지금은 한 번에 한 페이지만 컨테이너 전체 크기로 보여주고, 좌우 스와이프로만
 // 페이지를 넘기는 방식으로 바뀌었다(버튼 없음) — 페이지별로 캔버스를 미리 다
 // 그려서 배열에 들고 있다가, 화면에는 현재 페이지의 캔버스 하나만 붙인다.
-export default function PdfPageViewer({ src, sheetId, updatedAt, onReady, onFirstPage, onOverswipe }: PdfPageViewerProps) {
+export default function PdfPageViewer({
+  src,
+  sheetId,
+  updatedAt,
+  onReady,
+  onFirstPage,
+  onOverswipe,
+  tapToTurn = false,
+  onRegisterTurn,
+}: PdfPageViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const pageSlotRef = useRef<HTMLDivElement>(null);
   const canvasesRef = useRef<HTMLCanvasElement[]>([]);
@@ -233,7 +255,6 @@ export default function PdfPageViewer({ src, sheetId, updatedAt, onReady, onFirs
   // 다음으로) 페이지를 넘기는 대신 onOverswipe로 "곡을 넘겨달라"고 알린다.
   function goToPage(index: number) {
     const count = canvasesRef.current.length;
-    if (count === 0) return;
     if (index < 0) {
       onOverswipe?.('prev');
       return;
@@ -247,6 +268,14 @@ export default function PdfPageViewer({ src, sheetId, updatedAt, onReady, onFirs
     showPage(index);
   }
 
+  const goToPageRef = useRef(goToPage);
+  goToPageRef.current = goToPage;
+
+  useEffect(() => {
+    onRegisterTurn?.((direction) => goToPageRef.current(pageIndexRef.current + (direction === 'next' ? 1 : -1)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   function handlePointerDown(e: ReactPointerEvent<HTMLDivElement>) {
     dragStartRef.current = { x: e.clientX, y: e.clientY };
   }
@@ -258,6 +287,16 @@ export default function PdfPageViewer({ src, sheetId, updatedAt, onReady, onFirs
 
     const deltaX = e.clientX - start.x;
     const deltaY = e.clientY - start.y;
+
+    if (tapToTurn && Math.abs(deltaX) < TAP_SLOP && Math.abs(deltaY) < TAP_SLOP) {
+      const zone = getTapZone(e.clientX, e.currentTarget.getBoundingClientRect());
+      if (zone) {
+        e.stopPropagation();
+        goToPage(pageIndexRef.current + (zone === 'next' ? 1 : -1));
+      }
+      return;
+    }
+
     // 세로로 더 많이 움직였거나 너무 짧게 움직인 제스처는 탭/오조작으로 보고 무시한다.
     if (Math.abs(deltaX) < SWIPE_THRESHOLD || Math.abs(deltaX) < Math.abs(deltaY) * 1.5) return;
 

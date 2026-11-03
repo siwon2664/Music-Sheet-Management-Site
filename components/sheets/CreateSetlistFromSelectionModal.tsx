@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { X } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { getDefaultSetlistTitle } from '@/lib/setlist';
+import { useEscapeKey } from '@/lib/useEscapeKey';
 import type { SheetRow } from './SheetsLibraryClient';
 
 interface CreateSetlistFromSelectionModalProps {
@@ -31,6 +32,7 @@ export default function CreateSetlistFromSelectionModal({
   const [title, setTitle] = useState(() => getDefaultSetlistTitle(todayIso()));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  useEscapeKey(onClose, !loading);
 
   function handleDateChange(value: string) {
     setDate(value);

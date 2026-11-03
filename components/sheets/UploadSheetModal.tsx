@@ -3,6 +3,7 @@
 import { useState, type DragEvent as ReactDragEvent, type FormEvent } from 'react';
 import { Sparkles, UploadCloud, X } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import { useEscapeKey } from '@/lib/useEscapeKey';
 import { uploadSheetFile } from '@/lib/sheetUpload';
 import { isAllowedSheetFile, SHEET_FILE_ACCEPT, SHEET_FILE_TYPE_HINT } from '@/lib/fileTypes';
 import { MAX_SHEETS_PER_TEAM, SHEET_LIMIT_MESSAGE } from '@/lib/limits';
@@ -39,6 +40,7 @@ export default function UploadSheetModal({
   const [expanding, setExpanding] = useState(false);
   const [dropActive, setDropActive] = useState(false);
   const [loading, setLoading] = useState(false);
+  useEscapeKey(onClose, !loading);
   const [error, setError] = useState<string | null>(null);
 
   // 첫 페이지에서 제목/Key를 자동 인식해 제안하는 기능. 정확도가 100%가

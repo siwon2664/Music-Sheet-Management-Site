@@ -1,16 +1,18 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
-import { Check } from 'lucide-react';
+import { Check, X } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { isPdfFile } from '@/lib/storage';
 import { cacheDrawing, cacheSheetFile, getCachedSheetFile } from '@/lib/offlineSheetCache';
 import { keyFromTitle } from '@/lib/setlist';
 import { getSignedSheetUrls } from '@/lib/sheetStorage';
-import PdfPageViewer from '@/components/sheets/PdfPageViewer';
+import PdfPageViewer, { getTapZone } from '@/components/sheets/PdfPageViewer';
 import DrawingLayer from '@/components/sheets/DrawingLayer';
 import ImageDrawingStage from '@/components/sheets/ImageDrawingStage';
 import type { SetlistItem } from './SetlistPanel';
+
+const TAP_HINT_KEY = 'performance-tap-hint-seen';
 
 interface PerformanceModeProps {
   items: SetlistItem[];
@@ -39,6 +41,11 @@ export default function PerformanceMode({ items, teamId, initialIndex = 0, onClo
   const objectUrlsRef = useRef<Set<string>>(new Set());
   // 불러오기를 새로 시작하거나(다시 시도) 화면을 닫으면 값이 바뀌어, 진행 중이던 이전 작업을 무효로 만든다.
   const preloadRunRef = useRef(0);
+  // 곡별 PDF 뷰어의 쪽 넘기기 함수. 있으면 페달·키보드·탭을 쪽 단위로 먼저 처리한다.
+  const pageTurnersRef = useRef<Record<string, (direction: 'next' | 'prev') => void>>({});
+  const currentItemIdRef = useRef(item?.id);
+  currentItemIdRef.current = item?.id;
+  const [showTapHint, setShowTapHint] = useState(false);
 
   function goPrev() {
     setIndex((prev) => Math.max(0, prev - 1));
@@ -53,6 +60,13 @@ export default function PerformanceMode({ items, teamId, initialIndex = 0, onClo
   // 세로 이동량보다 뚜렷이 클 때만 곡 전환으로 인식한다.
   const SWIPE_THRESHOLD = 60;
 
+  function turn(direction: 'next' | 'prev') {
+    const pageTurner = currentItemIdRef.current ? pageTurnersRef.current[currentItemIdRef.current] : undefined;
+    if (pageTurner) pageTurner(direction);
+    else if (direction === 'next') goNext();
+    else goPrev();
+  }
+
   function handlePointerDown(e: ReactPointerEvent<HTMLDivElement>) {
     dragStartRef.current = { x: e.clientX, y: e.clientY };
   }
@@ -64,6 +78,14 @@ export default function PerformanceMode({ items, teamId, initialIndex = 0, onClo
 
     const deltaX = e.clientX - start.x;
     const deltaY = e.clientY - start.y;
+
+    if (Math.abs(deltaX) < 10 && Math.abs(deltaY) < 10) {
+      if ((e.target as Element).closest('button')) return;
+      const zone = getTapZone(e.clientX, e.currentTarget.getBoundingClientRect());
+      if (zone === 'next') goNext();
+      if (zone === 'prev') goPrev();
+      return;
+    }
 
     if (Math.abs(deltaX) < SWIPE_THRESHOLD || Math.abs(deltaX) < Math.abs(deltaY) * 1.5) return;
 
@@ -137,13 +159,60 @@ export default function PerformanceMode({ items, teamId, initialIndex = 0, onClo
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key === 'Escape') onClose();
-      if (e.key === 'ArrowLeft') goPrev();
-      if (e.key === 'ArrowRight' || e.key === ' ') goNext();
+      // 블루투스 페달은 대개 PageUp/PageDown이나 방향키를 보낸다.
+      if (['ArrowLeft', 'ArrowUp', 'PageUp'].includes(e.key)) {
+        e.preventDefault();
+        turn('prev');
+      }
+      if (['ArrowRight', 'ArrowDown', 'PageDown', ' '].includes(e.key)) {
+        e.preventDefault();
+        turn('next');
+      }
     }
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items.length]);
+
+  // 연주 중에 태블릿 화면이 꺼지지 않게 한다. 탭을 벗어나면 브라우저가 풀어 버리므로 돌아올 때 다시 요청한다.
+  useEffect(() => {
+    let lock: WakeLockSentinel | null = null;
+    let closed = false;
+
+    async function acquire() {
+      try {
+        const sentinel = await navigator.wakeLock?.request('screen');
+        if (closed) void sentinel?.release();
+        else lock = sentinel ?? null;
+      } catch {
+        // 지원하지 않거나 저전력 모드면 건너뛴다.
+      }
+    }
+    function handleVisibilityChange() {
+      if (document.visibilityState === 'visible') void acquire();
+    }
+
+    void acquire();
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      closed = true;
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      lock?.release().catch(() => {});
+    };
+  }, []);
+
+  // 탭으로 넘길 수 있다는 걸 처음 한 번만 알려준다.
+  useEffect(() => {
+    try {
+      if (localStorage.getItem(TAP_HINT_KEY)) return;
+      localStorage.setItem(TAP_HINT_KEY, '1');
+    } catch {
+      return;
+    }
+    setShowTapHint(true);
+    const timer = setTimeout(() => setShowTapHint(false), 4000);
+    return () => clearTimeout(timer);
+  }, []);
 
   const markReady = useCallback((id: string) => {
     setReadyIds((prev) => {
@@ -363,6 +432,15 @@ export default function PerformanceMode({ items, teamId, initialIndex = 0, onClo
             {item?.bpm && <p className="text-xs text-white/50 mt-0.5">{item.bpm} BPM</p>}
           </div>
         </div>
+        {/* 전체화면을 지원하지 않는 기기(iPhone 등)에서는 키보드 없이 나갈 방법이 이 버튼뿐이다. */}
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="연주 모드 닫기"
+          className="shrink-0 w-14 flex items-center justify-center border-l border-white/15 text-white/70 hover:text-white hover:bg-white/10"
+        >
+          <X size={22} />
+        </button>
       </div>
 
       {item?.songForm && item.songForm.length > 0 && (
@@ -406,7 +484,7 @@ export default function PerformanceMode({ items, teamId, initialIndex = 0, onClo
         )}
 
         {/* 콘티의 모든 곡을 미리 마운트해둔다(현재 곡만 보이게 하고 나머지는
-            숨김) — 곡 전환 시 언마운트/리마운트가 일어나지 않아야 뷰어가 다시
+            visibility로 숨김. display:none이면 크기가 0이라 미리 그려도 곡을 처음 넘길 때 다시 그린다) — 곡 전환 시 언마운트/리마운트가 일어나지 않아야 뷰어가 다시
             로딩·디코딩을 반복하지 않고, 이미 그려둔 화면을 그대로 즉시
             보여줄 수 있다. */}
         {validItems.map((it) => {
@@ -420,7 +498,7 @@ export default function PerformanceMode({ items, teamId, initialIndex = 0, onClo
             <div
               key={it.id}
               className={`absolute inset-0 flex items-center justify-center ${
-                isCurrent && !loading ? '' : 'hidden'
+                isCurrent && !loading ? '' : 'invisible'
               }`}
             >
               {pdf ? (
@@ -435,6 +513,10 @@ export default function PerformanceMode({ items, teamId, initialIndex = 0, onClo
                     src={url}
                     sheetId={it.sheetId}
                     updatedAt={it.updatedAt}
+                    tapToTurn
+                    onRegisterTurn={(pageTurner) => {
+                      pageTurnersRef.current[it.id] = pageTurner;
+                    }}
                     onReady={() => markReady(it.id)}
                     onOverswipe={(direction) => (direction === 'next' ? goNext() : goPrev())}
                   />
@@ -455,6 +537,12 @@ export default function PerformanceMode({ items, teamId, initialIndex = 0, onClo
           );
         })}
       </div>
+
+      {showTapHint && !loading && (
+        <p className="absolute bottom-16 left-1/2 -translate-x-1/2 text-sm text-white bg-black/80 rounded-full px-4 py-2 whitespace-nowrap pointer-events-none">
+          화면 양쪽 끝을 누르면 넘어갑니다
+        </p>
+      )}
 
       {item?.note && (
         <div className="px-4 py-3 text-center text-sm text-white/80 bg-white/5">{item.note}</div>

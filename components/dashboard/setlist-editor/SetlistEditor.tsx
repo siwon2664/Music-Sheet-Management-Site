@@ -24,6 +24,7 @@ import { arrayMove, sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 import { createClient } from '@/lib/supabase/client';
 import { prefetchSignedUrls } from '@/lib/sheetStorage';
 import { isPdfFile } from '@/lib/storage';
+import { useEscapeKey } from '@/lib/useEscapeKey';
 import SheetLibraryPanel, { LIBRARY_DROP_ID, type LibrarySheet } from './SheetLibraryPanel';
 import SetlistPanel, { SETLIST_DROP_END_ID, type SetlistItem } from './SetlistPanel';
 import type { TeamRole } from '@/types/supabase';
@@ -112,6 +113,7 @@ export default function SetlistEditor({
   const [showDownloadModal, setShowDownloadModal] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
+  useEscapeKey(() => setShowDownloadModal(false), showDownloadModal && !downloading);
 
   // 자동저장: items가 바뀔 때마다 debounce 타이머를 새로 걸고, 타이머가 끝나면
   // 그 시점의 최신 items로 저장한다. setTimeout 콜백 안에서는 클로저로 캡처된

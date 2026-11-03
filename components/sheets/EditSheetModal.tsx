@@ -3,6 +3,7 @@
 import { useEffect, useState, type DragEvent as ReactDragEvent, type FormEvent } from 'react';
 import { UploadCloud, X } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import { useEscapeKey } from '@/lib/useEscapeKey';
 import { uploadSheetFile } from '@/lib/sheetUpload';
 import { getSignedSheetUrl, removeSheetFiles } from '@/lib/sheetStorage';
 import { isAllowedSheetFile, SHEET_FILE_ACCEPT, SHEET_FILE_TYPE_HINT } from '@/lib/fileTypes';
@@ -36,6 +37,7 @@ export default function EditSheetModal({ sheet, teamId, onClose, onUpdated }: Ed
   const [key, setKey] = useState(sheet.key ?? '');
   const [dropActive, setDropActive] = useState(false);
   const [loading, setLoading] = useState(false);
+  useEscapeKey(onClose, !loading);
   const [error, setError] = useState<string | null>(null);
 
   // 낱장 목록 — 기존 파일을 페이지 단위로 펼친 뒤, 새 악보 추가 화면과 같은

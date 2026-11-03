@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { X } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { getDefaultSetlistTitle } from '@/lib/setlist';
+import { useEscapeKey } from '@/lib/useEscapeKey';
 
 interface CreateSetlistModalProps {
   teamId: string;
@@ -20,6 +21,7 @@ export default function CreateSetlistModal({ teamId, date, onClose }: CreateSetl
   const [description, setDescription] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  useEscapeKey(onClose, !loading);
 
   async function handleCreateSetlist(e: FormEvent) {
     e.preventDefault();
